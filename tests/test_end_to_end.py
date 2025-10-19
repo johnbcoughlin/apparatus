@@ -5,6 +5,8 @@ import sys
 import time
 import urllib.request
 from pathlib import Path
+import pytest
+import apparatus
 
 def wait_for_server(url, max_attempts=30, interval=0.01):
     """Wait for server to be ready by polling the health endpoint."""
@@ -16,7 +18,7 @@ def wait_for_server(url, max_attempts=30, interval=0.01):
             time.sleep(interval)
     return False
 
-def main():
+def test_create_and_view_run():
     server_path = Path(__file__).parent.parent / "server" / "apparatus-server"
 
     server_process = subprocess.Popen(
@@ -36,15 +38,16 @@ def main():
             print("Server process exited (port may be in use)", file=sys.stderr)
             sys.exit(1)
 
+        id = apparatus.create_run("my great run")
+
         # Test home page
-        with urllib.request.urlopen("http://localhost:8080", timeout=5) as response:
+        with urllib.request.urlopen(f"http://localhost:8080/runs/{id}", timeout=5) as response:
             content = response.read().decode('utf-8')
-            assert "Welcome to Apparatus" in content
+            assert f"Run: my great run" in content
+            assert id in content
 
     finally:
         if server_process.poll() is None:
             server_process.terminate()
             server_process.wait()
 
-if __name__ == "__main__":
-    main()

@@ -1,0 +1,10 @@
+[tasks.build-server]
+description = "Build the server binary"
+run = "cd server && go build"
+sources = ["server/**/*.go"]
+outputs = ["server/apparatus-server"]
+
+[tasks.test]
+depends = ["build-server"]
+sources = ["tests/**/run_tests.sh", "tests/**/*.py"]
+run = "tests/run_tests.sh"

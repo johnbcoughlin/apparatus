@@ -39,12 +39,14 @@ def test_create_and_view_run():
             sys.exit(1)
 
         id = apparatus.create_run("my great run")
+        apparatus.log_param(id, "param", "musa")
 
         # Test home page
         with urllib.request.urlopen(f"http://localhost:8080/runs/{id}", timeout=5) as response:
             content = response.read().decode('utf-8')
             assert f"Run: my great run" in content
             assert id in content
+            assert "musa" in content
 
     finally:
         if server_process.poll() is None:

@@ -1,3 +1,8 @@
+[tasks.run-server]
+depends = ["build-server"]
+description = "Run the server"
+run = "server/apparatus-server"
+
 [tasks.build-server]
 description = "Build the server binary"
 run = "cd server && go build"

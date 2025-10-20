@@ -16,7 +16,7 @@ func initDB() {
 		log.Fatalf("Failed to open database: %v", err)
 	}
 
-	createTableSQL := `
+	createRunsTableSQL := `
 	CREATE TABLE IF NOT EXISTS runs (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		uuid TEXT UNIQUE NOT NULL,
@@ -25,8 +25,27 @@ func initDB() {
 	);
 	`
 
-	_, err = db.Exec(createTableSQL)
+	_, err = db.Exec(createRunsTableSQL)
 	if err != nil {
-		log.Fatalf("Failed to create table: %v", err)
+		log.Fatalf("Failed to create runs table: %v", err)
+	}
+
+	createParametersTableSQL := `
+	CREATE TABLE IF NOT EXISTS parameters (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		run_id INTEGER NOT NULL,
+		key TEXT NOT NULL,
+		value_type TEXT NOT NULL,
+		value_string TEXT,
+		value_bool INTEGER,
+		value_float REAL,
+		value_int INTEGER,
+		UNIQUE(run_id, key)
+	);
+	`
+
+	_, err = db.Exec(createParametersTableSQL)
+	if err != nil {
+		log.Fatalf("Failed to create parameters table: %v", err)
 	}
 }

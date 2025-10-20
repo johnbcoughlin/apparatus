@@ -9,6 +9,10 @@ Alternative to MLflow for experiment tracking without AI-specific cruft.
 - SQL datastores (SQLite initially, Postgres later)
 - Frontend code lives in server/ subdirectory
 
+## Database Conventions
+- **No foreign key constraints** - Use integer references but don't enforce with FOREIGN KEY constraints
+- Keep schema simple and compatible across SQLite and Postgres
+
 ## Project Structure
 ```
 apparatus/

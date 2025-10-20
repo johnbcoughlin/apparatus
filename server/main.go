@@ -30,6 +30,59 @@ func main() {
 }
 
 func handleHome(w http.ResponseWriter, r *http.Request) {
+	// Query all runs
+	rows, err := db.Query(`
+		SELECT uuid, name, created_at
+		FROM runs
+		ORDER BY created_at DESC`)
+	if err != nil {
+		log.Fatalf("Failed to query runs: %v", err)
+	}
+	defer rows.Close()
+
+	type Run struct {
+		UUID      string
+		Name      string
+		CreatedAt string
+	}
+	var runs []Run
+
+	for rows.Next() {
+		var uuid, name, createdAt string
+		err := rows.Scan(&uuid, &name, &createdAt)
+		if err != nil {
+			log.Fatalf("Failed to scan run: %v", err)
+		}
+		runs = append(runs, Run{UUID: uuid, Name: name, CreatedAt: createdAt})
+	}
+
+	// Build runs table HTML
+	runsHTML := ""
+	if len(runs) > 0 {
+		runsHTML = `
+	<h2>Recent Runs</h2>
+	<table border="1" cellpadding="5" cellspacing="0">
+		<thead>
+			<tr>
+				<th>Name</th>
+				<th>Created At</th>
+			</tr>
+		</thead>
+		<tbody>`
+		for _, run := range runs {
+			runsHTML += fmt.Sprintf(`
+			<tr>
+				<td><a href="/runs/%s">%s</a></td>
+				<td>%s</td>
+			</tr>`, run.UUID, run.Name, run.CreatedAt)
+		}
+		runsHTML += `
+		</tbody>
+	</table>`
+	} else {
+		runsHTML = `<p>No runs yet. Create one using the Python library!</p>`
+	}
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	fmt.Fprintf(w, `<!DOCTYPE html>
 <html>
@@ -39,8 +92,9 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 <body>
 	<h1>Welcome to Apparatus</h1>
 	<p>Experiment tracking without the AI cruft.</p>
+	%s
 </body>
-</html>`)
+</html>`, runsHTML)
 }
 
 func handleHealth(w http.ResponseWriter, r *http.Request) {

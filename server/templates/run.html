@@ -1,0 +1,26 @@
+{{template "header.html" .}}
+	<h2>Run: {{.Name}}</h2>
+	<p>UUID: {{.UUID}}</p>
+	{{if .Parameters}}
+	<h2>Parameters</h2>
+	<table border="1" cellpadding="5" cellspacing="0">
+		<thead>
+			<tr>
+				<th>Key</th>
+				<th>Value</th>
+				<th>Type</th>
+			</tr>
+		</thead>
+		<tbody>
+		{{range .Parameters}}
+			<tr>
+				<td>{{.Key}}</td>
+				<td>{{.Value}}</td>
+				<td>{{.Type}}</td>
+			</tr>
+		{{end}}
+		</tbody>
+	</table>
+	{{end}}
+</body>
+</html>

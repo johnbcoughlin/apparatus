@@ -2,8 +2,10 @@ package main
 
 import (
 	"database/sql"
+	"embed"
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"log"
 	"net/http"
 	"strings"
@@ -11,8 +13,20 @@ import (
 	"github.com/google/uuid"
 )
 
+//go:embed templates/*.html
+var templatesFS embed.FS
+
+var templates *template.Template
+
 func main() {
 	initDB()
+
+	// Load templates from embedded filesystem
+	var err error
+	templates, err = template.ParseFS(templatesFS, "templates/*.html")
+	if err != nil {
+		log.Fatalf("Failed to parse templates: %v", err)
+	}
 
 	// Define routes
 	http.HandleFunc("/", handleHome)
@@ -29,6 +43,12 @@ func main() {
 	}
 }
 
+type Run struct {
+	UUID      string
+	Name      string
+	CreatedAt string
+}
+
 func handleHome(w http.ResponseWriter, r *http.Request) {
 	// Query all runs
 	rows, err := db.Query(`
@@ -40,11 +60,6 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	type Run struct {
-		UUID      string
-		Name      string
-		CreatedAt string
-	}
 	var runs []Run
 
 	for rows.Next() {
@@ -56,45 +71,19 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 		runs = append(runs, Run{UUID: uuid, Name: name, CreatedAt: createdAt})
 	}
 
-	// Build runs table HTML
-	runsHTML := ""
-	if len(runs) > 0 {
-		runsHTML = `
-	<h2>Recent Runs</h2>
-	<table border="1" cellpadding="5" cellspacing="0">
-		<thead>
-			<tr>
-				<th>Name</th>
-				<th>Created At</th>
-			</tr>
-		</thead>
-		<tbody>`
-		for _, run := range runs {
-			runsHTML += fmt.Sprintf(`
-			<tr>
-				<td><a href="/runs/%s">%s</a></td>
-				<td>%s</td>
-			</tr>`, run.UUID, run.Name, run.CreatedAt)
-		}
-		runsHTML += `
-		</tbody>
-	</table>`
-	} else {
-		runsHTML = `<p>No runs yet. Create one using the Python library!</p>`
+	data := struct {
+		Title string
+		Runs  []Run
+	}{
+		Title: "Home",
+		Runs:  runs,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprintf(w, `<!DOCTYPE html>
-<html>
-<head>
-	<title>Apparatus</title>
-</head>
-<body>
-	<h1>Welcome to Apparatus</h1>
-	<p>Experiment tracking without the AI cruft.</p>
-	%s
-</body>
-</html>`, runsHTML)
+	err = templates.ExecuteTemplate(w, "home.html", data)
+	if err != nil {
+		log.Fatalf("Failed to execute template: %v", err)
+	}
 }
 
 func handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -165,6 +154,12 @@ func handleAPILogParam(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
+type Parameter struct {
+	Key   string
+	Value string
+	Type  string
+}
+
 func handleViewRun(w http.ResponseWriter, r *http.Request) {
 	runUUID := strings.TrimPrefix(r.URL.Path, "/runs/")
 
@@ -186,11 +181,6 @@ func handleViewRun(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	type Parameter struct {
-		Key   string
-		Value string
-		Type  string
-	}
 	var parameters []Parameter
 
 	for rows.Next() {
@@ -224,43 +214,21 @@ func handleViewRun(w http.ResponseWriter, r *http.Request) {
 		parameters = append(parameters, Parameter{Key: key, Value: value, Type: valueType})
 	}
 
-	// Build parameters table HTML
-	parametersHTML := ""
-	if len(parameters) > 0 {
-		parametersHTML = `
-	<h2>Parameters</h2>
-	<table border="1" cellpadding="5" cellspacing="0">
-		<thead>
-			<tr>
-				<th>Key</th>
-				<th>Value</th>
-				<th>Type</th>
-			</tr>
-		</thead>
-		<tbody>`
-		for _, param := range parameters {
-			parametersHTML += fmt.Sprintf(`
-			<tr>
-				<td>%s</td>
-				<td>%s</td>
-				<td>%s</td>
-			</tr>`, param.Key, param.Value, param.Type)
-		}
-		parametersHTML += `
-		</tbody>
-	</table>`
+	data := struct {
+		Title      string
+		UUID       string
+		Name       string
+		Parameters []Parameter
+	}{
+		Title:      name,
+		UUID:       runUUID,
+		Name:       name,
+		Parameters: parameters,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprintf(w, `<!DOCTYPE html>
-<html>
-<head>
-	<title>Run: %s</title>
-</head>
-<body>
-	<h1>Run: %s</h1>
-	<p>UUID: %s</p>
-	%s
-</body>
-</html>`, name, name, runUUID, parametersHTML)
+	err = templates.ExecuteTemplate(w, "run.html", data)
+	if err != nil {
+		log.Fatalf("Failed to execute template: %v", err)
+	}
 }

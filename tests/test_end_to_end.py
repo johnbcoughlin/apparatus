@@ -18,7 +18,9 @@ def wait_for_server(url, max_attempts=30, interval=0.01):
             time.sleep(interval)
     return False
 
-def test_create_and_view_run():
+@pytest.fixture(scope="module")
+def running_server():
+    """Pytest fixture to start and stop the apparatus server for all tests in the module."""
     server_path = Path(__file__).parent.parent / "server" / "apparatus-server"
 
     server_process = subprocess.Popen(
@@ -38,18 +40,21 @@ def test_create_and_view_run():
             print("Server process exited (port may be in use)", file=sys.stderr)
             sys.exit(1)
 
-        id = apparatus.create_run("my great run")
-        apparatus.log_param(id, "param", "musa")
-
-        # Test home page
-        with urllib.request.urlopen(f"http://localhost:8080/runs/{id}", timeout=5) as response:
-            content = response.read().decode('utf-8')
-            assert f"Run: my great run" in content
-            assert id in content
-            assert "musa" in content
+        yield server_process
 
     finally:
         if server_process.poll() is None:
             server_process.terminate()
             server_process.wait()
+
+def test_create_and_view_run(running_server):
+    id = apparatus.create_run("my great run")
+    apparatus.log_param(id, "param", "musa")
+
+    # Test home page
+    with urllib.request.urlopen(f"http://localhost:8080/runs/{id}", timeout=5) as response:
+        content = response.read().decode('utf-8')
+        assert f"Run: my great run" in content
+        assert id in content
+        assert "musa" in content
 

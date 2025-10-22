@@ -7,6 +7,7 @@ import urllib.request
 from pathlib import Path
 import pytest
 import apparatus
+import tempfile
 
 def wait_for_server(url, max_attempts=30, interval=0.01):
     """Wait for server to be ready by polling the health endpoint."""
@@ -23,10 +24,9 @@ def running_server():
     """Pytest fixture to start and stop the apparatus server for all tests in the module."""
     server_path = Path(__file__).parent.parent / "server" / "apparatus-server"
 
+    tmpdir = tempfile.TemporaryDirectory()
     server_process = subprocess.Popen(
-        [str(server_path)],
-        #stdout=subprocess.DEVNULL,
-        #stderr=subprocess.DEVNULL,
+        [str(server_path), f"{tmpdir.name}/apparatus.db"],
     )
 
     try:
@@ -46,6 +46,7 @@ def running_server():
         if server_process.poll() is None:
             server_process.terminate()
             server_process.wait()
+        tmpdir.cleanup()
 
 def test_runs_on_main_page(running_server):
     apparatus.create_run("run 234jkl")

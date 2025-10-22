@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"embed"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"html/template"
 	"log"
@@ -23,7 +24,11 @@ var staticFS embed.FS
 var templates *template.Template
 
 func main() {
-	initDB()
+	// Parse command line flags
+	dbConnString := flag.String("db", "sqlite:///apparatus.db", "Database connection string (e.g., sqlite:///path/to/db.db)")
+	flag.Parse()
+
+	initDB(*dbConnString)
 
 	// Load templates from embedded filesystem
 	var err error

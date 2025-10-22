@@ -3,15 +3,25 @@ package main
 import (
 	"database/sql"
 	"log"
+	"strings"
 
 	_ "github.com/mattn/go-sqlite3"
 )
 
 var db *sql.DB
 
-func initDB() {
+func initDB(connString string) {
+	// Parse connection string
+	// Expected format: sqlite:///path/to/db.db
+	var dbPath string
+	if strings.HasPrefix(connString, "sqlite:///") {
+		dbPath = strings.TrimPrefix(connString, "sqlite:///")
+	} else {
+		log.Fatalf("Invalid connection string format. Expected sqlite:///path/to/db.db, got: %s", connString)
+	}
+
 	var err error
-	db, err = sql.Open("sqlite3", "./apparatus.db")
+	db, err = sql.Open("sqlite3", dbPath)
 	if err != nil {
 		log.Fatalf("Failed to open database: %v", err)
 	}

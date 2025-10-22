@@ -48,4 +48,22 @@ func initDB() {
 	if err != nil {
 		log.Fatalf("Failed to create parameters table: %v", err)
 	}
+
+	createMetricsTableSQL := `
+        CREATE TABLE IF NOT EXISTS metrics (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                run_id INTEGER NOT NULL,
+                key TEXT NOT NULL,
+                value REAL NOT NULL,
+                logged_at TIMESTAMP NOT NULL,
+                time REAL,
+                step INTEGER,
+                UNIQUE(run_id, key, time, step)
+        );
+        `
+
+	_, err = db.Exec(createMetricsTableSQL)
+	if err != nil {
+		log.Fatalf("Failed to create metrics table: %v", err)
+	}
 }

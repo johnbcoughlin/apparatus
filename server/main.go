@@ -158,6 +158,75 @@ func handleAPILogParam(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
+func handleAPILogMetric(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		RunUUID  string   `json:"run_uuid"`
+		Key      string   `json:"key"`
+		Value    *float64 `json:"value,omitempty"`
+		LoggedAt *int64   `json:"logged_at,omitempty"`
+		Time     *float64 `json:"time,omitempty"`
+		Step     *int     `json:"step,omitempty"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid JSON"})
+		return
+	}
+
+	// Validate mandatory fields and collect missing ones
+	var missing []string
+	if req.RunUUID == "" {
+		missing = append(missing, "run_uuid")
+	}
+	if req.Key == "" {
+		missing = append(missing, "key")
+	}
+	if req.Value == nil {
+		missing = append(missing, "value")
+	}
+	if req.LoggedAt == nil {
+		missing = append(missing, "logged_at")
+	}
+
+	if len(missing) > 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":          "Missing required fields",
+			"missing_fields": missing,
+		})
+		return
+	}
+
+	// Get run_id from uuid
+	var runID int
+	err := db.QueryRow("SELECT id FROM runs WHERE uuid = ?", req.RunUUID).Scan(&runID)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Run not found"})
+		return
+	}
+
+	// Insert metric
+	_, err = db.Exec(
+		"INSERT INTO metrics (run_id, key, value, logged_at, time, step) VALUES (?, ?, ?, ?, ?, ?)",
+		runID, req.Key, *req.Value, *req.LoggedAt, req.Time, req.Step,
+	)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to insert metric"})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
 type Parameter struct {
 	Key   string
 	Value string

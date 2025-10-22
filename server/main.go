@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+        "time"
 
 	"github.com/google/uuid"
 )
@@ -36,6 +37,7 @@ func main() {
 	http.HandleFunc("/health", handleHealth)
 	http.HandleFunc("/api/runs", handleAPICreateRun)
 	http.HandleFunc("/api/params", handleAPILogParam)
+	http.HandleFunc("/api/metrics", handleAPILogMetric)
 	http.HandleFunc("/runs/", handleViewRun)
 	http.Handle("/static/", http.FileServer(http.FS(staticFS)))
 
@@ -233,6 +235,18 @@ type Parameter struct {
 	Type  string
 }
 
+type MetricValue struct {
+	Value    string
+	LoggedAt string
+	Time     string
+	Step     string
+}
+
+type Metric struct {
+	Key    string
+	Values []MetricValue
+}
+
 func handleViewRun(w http.ResponseWriter, r *http.Request) {
 	runUUID := strings.TrimPrefix(r.URL.Path, "/runs/")
 
@@ -287,16 +301,70 @@ func handleViewRun(w http.ResponseWriter, r *http.Request) {
 		parameters = append(parameters, Parameter{Key: key, Value: value, Type: valueType})
 	}
 
+	// Query metrics for this run, grouped by key
+	metricRows, err := db.Query(`
+		SELECT key, value, logged_at, time, step
+		FROM metrics
+		WHERE run_id = ?
+		ORDER BY key, step, time`, runID)
+	if err != nil {
+		log.Fatalf("Failed to query metrics: %v", err)
+	}
+	defer metricRows.Close()
+
+	// Group metrics by key
+	metricsMap := make(map[string][]MetricValue)
+	for metricRows.Next() {
+		var key string
+		var value float64
+		var loggedAt time.Time
+		var timeVal sql.NullFloat64
+		var step sql.NullInt64
+
+		err := metricRows.Scan(&key, &value, &loggedAt, &timeVal, &step)
+		if err != nil {
+			log.Fatalf("Failed to scan metric: %v", err)
+		}
+
+		timeStr := ""
+		if timeVal.Valid {
+			timeStr = fmt.Sprintf("%g", timeVal.Float64)
+		}
+
+		stepStr := ""
+		if step.Valid {
+			stepStr = fmt.Sprintf("%d", step.Int64)
+		}
+
+		metricsMap[key] = append(metricsMap[key], MetricValue{
+			Value:    fmt.Sprintf("%g", value),
+			LoggedAt: fmt.Sprintf("%d", loggedAt.UnixMilli()),
+			Time:     timeStr,
+			Step:     stepStr,
+		})
+	}
+
+	// Convert to slice of Metric
+	var metrics []Metric
+	for key, values := range metricsMap {
+		metrics = append(metrics, Metric{
+			Key:    key,
+			Values: values,
+		})
+	}
+
 	data := struct {
 		Title      string
 		UUID       string
 		Name       string
 		Parameters []Parameter
+		Metrics    []Metric
 	}{
 		Title:      name,
 		UUID:       runUUID,
 		Name:       name,
 		Parameters: parameters,
+		Metrics:    metrics,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

@@ -6,7 +6,7 @@ run = "server/apparatus-server"
 [tasks.build-server]
 description = "Build the server binary"
 run = "cd server && go build"
-sources = ["server/**/*.go"]
+sources = ["server/**/*.go", "server/templates/*.html", "server/static/*.css"]
 outputs = ["server/apparatus-server"]
 
 [tasks.test]

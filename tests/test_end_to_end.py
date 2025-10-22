@@ -25,8 +25,8 @@ def running_server():
 
     server_process = subprocess.Popen(
         [str(server_path)],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        #stdout=subprocess.DEVNULL,
+        #stderr=subprocess.DEVNULL,
     )
 
     try:
@@ -61,10 +61,14 @@ def test_create_and_view_run(running_server):
     id = apparatus.create_run("my great run")
     apparatus.log_param(id, "param", "musa")
 
+    apparatus.log_metric(id, "metric", 46.7, step=5)
+    apparatus.log_metric(id, "metric", 88.9, step=3)
+
     # Test home page
     with urllib.request.urlopen(f"http://localhost:8080/runs/{id}", timeout=5) as response:
         content = response.read().decode('utf-8')
         assert f"Run: my great run" in content
         assert id in content
         assert "musa" in content
+        assert "88.9, 46.7" in content
 

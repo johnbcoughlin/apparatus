@@ -22,5 +22,24 @@
 		</tbody>
 	</table>
 	{{end}}
+	<h2>Metrics</h2>
+	<table border="1" cellpadding="5" cellspacing="0">
+		<thead>
+			<tr>
+				<th>Key</th>
+				<th>Values</th>
+			</tr>
+		</thead>
+		<tbody>
+		{{range .Metrics}}
+			<tr>
+				<td>{{.Key}}</td>
+				<td>
+					{{range $i, $v := .Values}}{{if lt $i 3}}{{if $i}}, {{end}}{{$v.Value}}{{end}}{{end}}{{if gt (len .Values) 3}}...{{end}}
+				</td>
+			</tr>
+		{{end}}
+		</tbody>
+	</table>
 </body>
 </html>

@@ -47,6 +47,16 @@ def running_server():
             server_process.terminate()
             server_process.wait()
 
+def test_runs_on_main_page(running_server):
+    apparatus.create_run("run 234jkl")
+    apparatus.create_run("run 147abc")
+
+    # Test home page
+    with urllib.request.urlopen(f"http://localhost:8080", timeout=5) as response:
+        content = response.read().decode('utf-8')
+        assert "234jkl" in content
+        assert "147abc" in content
+
 def test_create_and_view_run(running_server):
     id = apparatus.create_run("my great run")
     apparatus.log_param(id, "param", "musa")

@@ -16,6 +16,9 @@ import (
 //go:embed templates/*.html
 var templatesFS embed.FS
 
+//go:embed static/*
+var staticFS embed.FS
+
 var templates *template.Template
 
 func main() {
@@ -34,6 +37,7 @@ func main() {
 	http.HandleFunc("/api/runs", handleAPICreateRun)
 	http.HandleFunc("/api/params", handleAPILogParam)
 	http.HandleFunc("/runs/", handleViewRun)
+	http.Handle("/static/", http.FileServer(http.FS(staticFS)))
 
 	// Start server
 	port := "8080"

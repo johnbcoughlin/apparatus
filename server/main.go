@@ -2,7 +2,6 @@ package main
 
 import (
 	"database/sql"
-	"embed"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -15,27 +14,12 @@ import (
 	"github.com/google/uuid"
 )
 
-//go:embed templates/*.html
-var templatesFS embed.FS
-
-//go:embed static/*
-var staticFS embed.FS
-
-var templates *template.Template
-
 func main() {
 	// Parse command line flags
 	dbConnString := flag.String("db", "sqlite:///apparatus.db", "Database connection string (e.g., sqlite:///path/to/db.db)")
 	flag.Parse()
 
 	initDB(*dbConnString)
-
-	// Load templates from embedded filesystem
-	var err error
-	templates, err = template.ParseFS(templatesFS, "templates/*.html")
-	if err != nil {
-		log.Fatalf("Failed to parse templates: %v", err)
-	}
 
 	// Define routes
 	http.HandleFunc("/", handleHome)
@@ -44,7 +28,7 @@ func main() {
 	http.HandleFunc("/api/params", handleAPILogParam)
 	http.HandleFunc("/api/metrics", handleAPILogMetric)
 	http.HandleFunc("/runs/", handleViewRun)
-	http.Handle("/static/", http.FileServer(http.FS(staticFS)))
+	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("./static"))))
 
 	// Start server
 	port := "8080"
@@ -91,7 +75,11 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	err = templates.ExecuteTemplate(w, "home.html", data)
+	tmpl, err := template.ParseFiles("templates/header.html", "templates/home.html")
+	if err != nil {
+		log.Fatalf("Failed to parse template: %v", err)
+	}
+	err = tmpl.ExecuteTemplate(w, "home.html", data)
 	if err != nil {
 		log.Fatalf("Failed to execute template: %v", err)
 	}
@@ -373,7 +361,11 @@ func handleViewRun(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	err = templates.ExecuteTemplate(w, "run.html", data)
+	tmpl, err := template.ParseFiles("templates/header.html", "templates/run.html")
+	if err != nil {
+		log.Fatalf("Failed to parse template: %v", err)
+	}
+	err = tmpl.ExecuteTemplate(w, "run.html", data)
 	if err != nil {
 		log.Fatalf("Failed to execute template: %v", err)
 	}

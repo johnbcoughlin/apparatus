@@ -1,5 +1,5 @@
 {{template "header.html" .}}
-	<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.min.js"></script>
 	<h2>Run: {{.Name}}</h2>
 	<p>UUID: {{.UUID}}</p>
 	{{if .Parameters}}
@@ -36,8 +36,8 @@
 		{{range $idx, $metric := .Metrics}}
 			<tr>
 				<td>{{$metric.Key}}</td>
-				<td>
-					<canvas id="chart-{{$idx}}" width="200" height="70"></canvas>
+				<td style="padding: 4px">
+					<canvas id="chart-{{$idx}}" width="400" height="120"></canvas>
 				</td>
 				<td>
 					{{range $i, $v := $metric.Values}}{{if lt $i 3}}{{if $i}}, {{end}}{{$v.Value}}{{end}}{{end}}{{if gt (len $metric.Values) 3}}...{{end}}
@@ -72,10 +72,13 @@
 						borderWidth: 1.5,
 						pointRadius: 0,
 						fill: false,
-						tension: 0.1
+						tension: 0
 					}]
 				},
 				options: {
+                                        layout: {
+                                                padding: 0
+                                        },
 					responsive: false,
 					maintainAspectRatio: false,
 					plugins: {
@@ -86,16 +89,18 @@
 						x: {
 							display: true,
 							ticks: {
-								font: { size: 8 },
-								maxTicksLimit: 5
+								font: { size: 12 },
+								maxTicksLimit: 4,
+                                                                padding: 0
 							},
 							grid: { display: false }
 						},
 						y: {
 							display: true,
 							ticks: {
-								font: { size: 8 },
-								maxTicksLimit: 4
+								font: { size: 12 },
+								maxTicksLimit: 3,
+                                                                padding: 0,
 							},
 							grid: { color: '#f0f0f0' }
 						}

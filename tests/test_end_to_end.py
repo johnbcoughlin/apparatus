@@ -26,7 +26,8 @@ def running_server():
 
     tmpdir = tempfile.TemporaryDirectory()
     server_process = subprocess.Popen(
-        [str(server_path), f"{tmpdir.name}/apparatus.db"],
+        [str(server_path), "-db", f"sqlite:///{tmpdir.name}/apparatus.db"],
+        cwd=Path(__file__).parent.parent / "server"
     )
 
     try:

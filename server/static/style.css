@@ -113,3 +113,16 @@ tbody tr:hover {
 		padding: 0.5rem;
 	}
 }
+
+button[role="tab"] {
+    padding: 0.5rem 1rem; 
+    margin-right: 0.5rem; 
+    border: none; 
+    background: #eee; 
+    cursor: pointer;
+}
+
+button[role="tab"].selected {
+    background: #0066cc;
+    color: white;
+}

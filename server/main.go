@@ -312,9 +312,57 @@ type Metric struct {
 	Values []MetricValue
 }
 
-func handleViewRun(w http.ResponseWriter, r *http.Request) {
-	runUUID := strings.TrimPrefix(r.URL.Path, "/runs/")
+type Artifact struct {
+	Path string
+	URI  string
+}
 
+func handleViewRun(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/runs/")
+	parts := strings.SplitN(path, "/", 2)
+	runUUID := parts[0]
+
+	// Route to sub-handlers
+	if len(parts) == 2 {
+		switch parts[1] {
+		case "overview":
+			handleRunOverview(w, r, runUUID)
+			return
+		case "artifacts":
+			handleRunArtifacts(w, r, runUUID)
+			return
+		}
+	}
+
+	// Main run page
+	var name string
+	err := db.QueryRow("SELECT name FROM runs WHERE uuid = ?", runUUID).Scan(&name)
+	if err != nil {
+		log.Fatalf("Failed to query run: %v", err)
+	}
+
+	data := struct {
+		Title string
+		UUID  string
+		Name  string
+	}{
+		Title: name,
+		UUID:  runUUID,
+		Name:  name,
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	tmpl, err := template.ParseFiles("templates/header.html", "templates/run.html")
+	if err != nil {
+		log.Fatalf("Failed to parse template: %v", err)
+	}
+	err = tmpl.ExecuteTemplate(w, "run.html", data)
+	if err != nil {
+		log.Fatalf("Failed to execute template: %v", err)
+	}
+}
+
+func handleRunOverview(w http.ResponseWriter, r *http.Request, runUUID string) {
 	var name string
 	var runID int
 	err := db.QueryRow("SELECT id, name FROM runs WHERE uuid = ?", runUUID).Scan(&runID, &name)
@@ -433,11 +481,58 @@ func handleViewRun(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	tmpl, err := template.ParseFiles("templates/header.html", "templates/run.html")
+	tmpl, err := template.ParseFiles("templates/run_overview.html")
 	if err != nil {
 		log.Fatalf("Failed to parse template: %v", err)
 	}
-	err = tmpl.ExecuteTemplate(w, "run.html", data)
+	err = tmpl.Execute(w, data)
+	if err != nil {
+		log.Fatalf("Failed to execute template: %v", err)
+	}
+}
+
+func handleRunArtifacts(w http.ResponseWriter, r *http.Request, runUUID string) {
+	var runID int
+	err := db.QueryRow("SELECT id FROM runs WHERE uuid = ?", runUUID).Scan(&runID)
+	if err != nil {
+		log.Fatalf("Failed to query run: %v", err)
+	}
+
+	// Query artifacts for this run
+	rows, err := db.Query(`
+		SELECT path, uri
+		FROM artifacts
+		WHERE run_id = ?
+		ORDER BY path`, runID)
+	if err != nil {
+		log.Fatalf("Failed to query artifacts: %v", err)
+	}
+	defer rows.Close()
+
+	var artifacts []Artifact
+	for rows.Next() {
+		var path, uri string
+		err := rows.Scan(&path, &uri)
+		if err != nil {
+			log.Fatalf("Failed to scan artifact: %v", err)
+		}
+		artifacts = append(artifacts, Artifact{Path: path, URI: uri})
+	}
+
+	data := struct {
+                UUID string
+		Artifacts []Artifact
+	}{
+                UUID: runUUID,
+		Artifacts: artifacts,
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	tmpl, err := template.ParseFiles("templates/run_artifacts.html")
+	if err != nil {
+		log.Fatalf("Failed to parse template: %v", err)
+	}
+	err = tmpl.Execute(w, data)
 	if err != nil {
 		log.Fatalf("Failed to execute template: %v", err)
 	}

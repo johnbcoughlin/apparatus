@@ -2,50 +2,56 @@
 	<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.min.js"></script>
 	<h2>Run: {{.Name}}</h2>
 	<p>UUID: {{.UUID}}</p>
-	{{if .Parameters}}
-	<h2>Parameters</h2>
-	<table border="1" cellpadding="5" cellspacing="0">
-		<thead>
-			<tr>
-				<th>Key</th>
-				<th>Value</th>
-				<th>Type</th>
-			</tr>
-		</thead>
-		<tbody>
-		{{range .Parameters}}
-			<tr>
-				<td>{{.Key}}</td>
-				<td>{{.Value}}</td>
-				<td>{{.Type}}</td>
-			</tr>
-		{{end}}
-		</tbody>
-	</table>
-	{{end}}
-	<h2>Metrics</h2>
-	<table border="1" cellpadding="5" cellspacing="0">
-		<thead>
-			<tr>
-				<th>Key</th>
-				<th>Chart</th>
-				<th>Values</th>
-			</tr>
-		</thead>
-		<tbody>
-		{{range $idx, $metric := .Metrics}}
-			<tr>
-				<td>{{$metric.Key}}</td>
-				<td style="padding: 4px">
-					<canvas id="chart-{{$idx}}" width="400" height="120"></canvas>
-				</td>
-				<td>
-					{{range $i, $v := $metric.Values}}{{if lt $i 3}}{{if $i}}, {{end}}{{$v.Value}}{{end}}{{end}}{{if gt (len $metric.Values) 3}}...{{end}}
-				</td>
-			</tr>
-		{{end}}
-		</tbody>
-	</table>
+	<div style="display: flex; gap: 2rem; align-items: flex-start; max-width: 100%;">
+		<div style="flex: 0 0 40%; min-width: 0;">
+			{{if .Parameters}}
+			<h2>Parameters</h2>
+			<table border="1" cellpadding="5" cellspacing="0">
+				<thead>
+					<tr>
+						<th>Key</th>
+						<th>Value</th>
+						<th>Type</th>
+					</tr>
+				</thead>
+				<tbody>
+				{{range .Parameters}}
+					<tr>
+						<td>{{.Key}}</td>
+						<td>{{.Value}}</td>
+						<td>{{.Type}}</td>
+					</tr>
+				{{end}}
+				</tbody>
+			</table>
+			{{end}}
+		</div>
+		<div style="flex: 0 0 60%; min-width: 0; padding-right: 2rem;">
+			<h2>Metrics</h2>
+			<table border="1" cellpadding="5" cellspacing="0">
+				<thead>
+					<tr>
+						<th>Key</th>
+						<th>Chart</th>
+						<th>Values</th>
+					</tr>
+				</thead>
+				<tbody>
+				{{range $idx, $metric := .Metrics}}
+					<tr>
+						<td>{{$metric.Key}}</td>
+						<td style="padding: 4px">
+							<canvas id="chart-{{$idx}}" width="400" height="120"></canvas>
+						</td>
+						<td>
+							{{range $i, $v := $metric.Values}}{{if lt $i 3}}{{if $i}}, {{end}}{{$v.Value}}{{end}}{{end}}{{if gt (len $metric.Values) 3}}...{{end}}
+						</td>
+					</tr>
+				{{end}}
+				</tbody>
+			</table>
+		</div>
+	</div>
 	<script>
 		// Metric data from server
 		const metricData = [

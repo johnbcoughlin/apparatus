@@ -25,8 +25,12 @@ def running_server():
     server_path = Path(__file__).parent.parent / "server" / "apparatus-server"
 
     tmpdir = tempfile.TemporaryDirectory()
+    print("tmpdir name:", tmpdir.name)
     server_process = subprocess.Popen(
-        [str(server_path), "-db", f"sqlite:///{tmpdir.name}/apparatus.db"],
+        [str(server_path), 
+         "-db", f"sqlite:///{tmpdir.name}/apparatus.db",
+         "-artifact-store-uri", f"file://{tmpdir.name}/artifacts",
+         ],
         cwd=Path(__file__).parent.parent / "server"
     )
 
@@ -73,4 +77,23 @@ def test_create_and_view_run(running_server):
         assert id in content
         assert "musa" in content
         assert "88.9, 46.7" in content
+
+def test_artifact_upload(running_server):
+    id = apparatus.create_run("run with artifacts")
+
+    # Create a temporary test file
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+        f.write("This is a test artifact file")
+        test_file_path = f.name
+
+    try:
+        # Upload the artifact
+        apparatus.log_artifact(id, "results/test_output.txt", test_file_path)
+
+        # Verify artifact was stored (we can't easily test file serving without implementing the view route)
+        # For now, just verify the upload succeeded without error
+        assert True
+    finally:
+        # Clean up temp file
+        Path(test_file_path).unlink()
 

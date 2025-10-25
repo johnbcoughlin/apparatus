@@ -101,3 +101,70 @@ def log_metric(run_uuid, key, value, logged_at=None, time_value=None, step=None,
                 raise RuntimeError(f"Failed to log metric: {error_data.get('error', 'Unknown error')}")
         except json.JSONDecodeError:
             raise RuntimeError(f"Failed to log metric: HTTP {e.code}")
+
+
+def log_artifact(run_uuid, path, file_path, tracking_uri="http://localhost:8080"):
+    """Log an artifact (file) for a run.
+
+    Args:
+        run_uuid: The UUID of the run
+        path: Logical path for the artifact (e.g., "model.pkl", "plots/accuracy.png")
+        file_path: Local filesystem path to the file to upload
+        tracking_uri: The tracking server URI
+    """
+    import os
+    from urllib.request import Request, urlopen
+    from urllib.error import HTTPError
+
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"File not found: {file_path}")
+
+    # Prepare multipart form data with a simple boundary string
+    boundary = "----ApparatusBoundary7MA4YWxkTrZu0gW"
+
+    # Read file content
+    with open(file_path, "rb") as f:
+        file_content = f.read()
+
+    # Build multipart body
+    body_parts = []
+
+    # Add run_uuid field
+    body_parts.append(f"--{boundary}\r\n".encode())
+    body_parts.append(b'Content-Disposition: form-data; name="run_uuid"\r\n\r\n')
+    body_parts.append(run_uuid.encode())
+
+    # Add path field
+    body_parts.append(f"\r\n--{boundary}\r\n".encode())
+    body_parts.append(b'Content-Disposition: form-data; name="path"\r\n\r\n')
+    body_parts.append(path.encode())
+
+    # Add file field
+    filename = os.path.basename(file_path)
+    body_parts.append(f"\r\n--{boundary}\r\n".encode())
+    body_parts.append(f'Content-Disposition: form-data; name="file"; filename="{filename}"\r\n'.encode())
+    body_parts.append(b'Content-Type: application/octet-stream\r\n\r\n')
+    body_parts.append(file_content)
+
+    # Final boundary
+    body_parts.append(f"\r\n--{boundary}--\r\n".encode())
+
+    body = b"".join(body_parts)
+
+    url = f"{tracking_uri}/api/artifacts"
+    req = Request(url, data=body, method="POST")
+    req.add_header("Content-Type", f"multipart/form-data; boundary={boundary}")
+
+    try:
+        with urlopen(req) as response:
+            if response.status != 200:
+                raise RuntimeError(f"Failed to log artifact: HTTP {response.status}")
+            result = json.loads(response.read().decode('utf-8'))
+            return result["status"]
+    except HTTPError as e:
+        error_body = e.read().decode('utf-8')
+        try:
+            error_data = json.loads(error_body)
+            raise RuntimeError(f"Failed to log artifact: {error_data.get('error', 'Unknown error')}")
+        except json.JSONDecodeError:
+            raise RuntimeError(f"Failed to log artifact: HTTP {e.code}")

@@ -17,9 +17,11 @@ import (
 func main() {
 	// Parse command line flags
 	dbConnString := flag.String("db", "sqlite:///apparatus.db", "Database connection string (e.g., sqlite:///path/to/db.db)")
+        artifactStoreURI := flag.String("artifact-store-uri", "file://artifacts", "URI for location to store artifacts (e.g. file:///path/to/artifacts")
 	flag.Parse()
 
 	initDB(*dbConnString)
+	initArtifactStore(*artifactStoreURI)
 
 	// Define routes
 	http.HandleFunc("/", handleHome)
@@ -27,6 +29,7 @@ func main() {
 	http.HandleFunc("/api/runs", handleAPICreateRun)
 	http.HandleFunc("/api/params", handleAPILogParam)
 	http.HandleFunc("/api/metrics", handleAPILogMetric)
+        http.HandleFunc("/api/artifacts", handleAPILogArtifact)
 	http.HandleFunc("/runs/", handleViewRun)
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("./static"))))
 
@@ -220,6 +223,75 @@ func handleAPILogMetric(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func handleAPILogArtifact(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Parse multipart form (32MB max)
+	err := r.ParseMultipartForm(32 << 20)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to parse multipart form"})
+		return
+	}
+
+	// Get form values
+	runUUID := r.FormValue("run_uuid")
+	artifactPath := r.FormValue("path")
+
+	if runUUID == "" || artifactPath == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Missing required fields: run_uuid, path"})
+		return
+	}
+
+	// Get run_id from uuid
+	var runID int
+	err = db.QueryRow("SELECT id FROM runs WHERE uuid = ?", runUUID).Scan(&runID)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Run not found"})
+		return
+	}
+
+	// Get uploaded file
+	file, _, err := r.FormFile("file")
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "No file uploaded"})
+		return
+	}
+	defer file.Close()
+
+	// Store artifact
+	uri, err := storeArtifact(runUUID, artifactPath, file)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": fmt.Sprintf("Failed to store artifact: %v", err)})
+		return
+	}
+
+	// Insert artifact metadata into database
+	_, err = db.Exec(
+		"INSERT OR REPLACE INTO artifacts (run_id, path, uri) VALUES (?, ?, ?)",
+		runID, artifactPath, uri,
+	)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to insert artifact metadata"})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"status": "ok",
+		"path":   artifactPath,
+		"uri":    uri,
+	})
 }
 
 type Parameter struct {

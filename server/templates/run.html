@@ -53,6 +53,12 @@
 		</div>
 	</div>
 	<script>
+		// Format numbers to max 3 significant figures
+		function formatSigFigs(value, index, ticks) {
+                        if (value == 0) return '0';
+                        return value.toPrecision(3);
+		}
+
 		// Metric data from server
 		const metricData = [
 			{{range $idx, $metric := .Metrics}}
@@ -93,11 +99,13 @@
 					},
 					scales: {
 						x: {
+                                                        type: 'linear',
 							display: true,
 							ticks: {
 								font: { size: 12 },
 								maxTicksLimit: 4,
-                                                                padding: 0
+                                                                padding: 0,
+								callback: formatSigFigs
 							},
 							grid: { display: false }
 						},
@@ -107,6 +115,7 @@
 								font: { size: 12 },
 								maxTicksLimit: 3,
                                                                 padding: 0,
+								callback: formatSigFigs
 							},
 							grid: { color: '#f0f0f0' }
 						}

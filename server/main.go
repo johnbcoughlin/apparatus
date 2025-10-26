@@ -9,7 +9,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
-        "time"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -17,7 +17,7 @@ import (
 func main() {
 	// Parse command line flags
 	dbConnString := flag.String("db", "sqlite:///apparatus.db", "Database connection string (e.g., sqlite:///path/to/db.db)")
-        artifactStoreURI := flag.String("artifact-store-uri", "file://artifacts", "URI for location to store artifacts (e.g. file:///path/to/artifacts")
+	artifactStoreURI := flag.String("artifact-store-uri", "file://artifacts", "URI for location to store artifacts (e.g. file:///path/to/artifacts")
 	flag.Parse()
 
 	initDB(*dbConnString)
@@ -29,8 +29,10 @@ func main() {
 	http.HandleFunc("/api/runs", handleAPICreateRun)
 	http.HandleFunc("/api/params", handleAPILogParam)
 	http.HandleFunc("/api/metrics", handleAPILogMetric)
-        http.HandleFunc("/api/artifacts", handleAPILogArtifact)
+	http.HandleFunc("/api/artifacts", handleAPILogArtifact)
 	http.HandleFunc("/runs/", handleViewRun)
+        http.HandleFunc("/artifacts", handleViewArtifact)
+        http.HandleFunc("/artifacts/blob", handleServeArtifactBlob)
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("./static"))))
 
 	// Start server
@@ -275,10 +277,17 @@ func handleAPILogArtifact(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+        var artifactType string
+        if strings.HasSuffix(artifactPath, ".png") {
+            artifactType = "image"
+        } else {
+            artifactType = "unknown"
+        }
+
 	// Insert artifact metadata into database
 	_, err = db.Exec(
-		"INSERT OR REPLACE INTO artifacts (run_id, path, uri) VALUES (?, ?, ?)",
-		runID, artifactPath, uri,
+		"INSERT OR REPLACE INTO artifacts (run_id, path, uri, type) VALUES (?, ?, ?, ?)",
+		runID, artifactPath, uri, artifactType,
 	)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -491,6 +500,13 @@ func handleRunOverview(w http.ResponseWriter, r *http.Request, runUUID string) {
 	}
 }
 
+type ArtifactsTreeNode struct {
+	Children    map[string]*ArtifactsTreeNode
+	ArtifactURI *string
+        ArtifactPath *string
+        RunUUID *string
+}
+
 func handleRunArtifacts(w http.ResponseWriter, r *http.Request, runUUID string) {
 	var runID int
 	err := db.QueryRow("SELECT id FROM runs WHERE uuid = ?", runUUID).Scan(&runID)
@@ -519,12 +535,14 @@ func handleRunArtifacts(w http.ResponseWriter, r *http.Request, runUUID string) 
 		artifacts = append(artifacts, Artifact{Path: path, URI: uri})
 	}
 
+        artifactsTree := assembleArtifactsTree(runUUID, artifacts)
+
 	data := struct {
-                UUID string
-		Artifacts []Artifact
+		UUID      string
+		ArtifactsTree ArtifactsTreeNode
 	}{
-                UUID: runUUID,
-		Artifacts: artifacts,
+		UUID:      runUUID,
+		ArtifactsTree: artifactsTree,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -536,4 +554,82 @@ func handleRunArtifacts(w http.ResponseWriter, r *http.Request, runUUID string) 
 	if err != nil {
 		log.Fatalf("Failed to execute template: %v", err)
 	}
+}
+
+func assembleArtifactsTree(runUUID string, artifacts []Artifact) ArtifactsTreeNode {
+	root := ArtifactsTreeNode{make(map[string]*ArtifactsTreeNode), nil, nil, nil}
+	for _, artifact := range artifacts {
+		node := &root
+		parts := strings.Split(artifact.Path, "/")
+		for _, part := range parts {
+			child, ok := node.Children[part]
+			if ok {
+				node = child
+			} else {
+				newNode := ArtifactsTreeNode{make(map[string]*ArtifactsTreeNode), nil, nil, nil}
+				node.Children[part] = &newNode
+				node = &newNode
+			}
+		}
+		node.ArtifactURI = &artifact.URI
+                node.ArtifactPath = &artifact.Path
+                node.RunUUID = &runUUID
+	}
+	return root
+}
+
+func handleViewArtifact(w http.ResponseWriter, r *http.Request) {
+	runUUID := r.URL.Query().Get("run_uuid")
+	artifactPath := r.URL.Query().Get("path")
+
+	if runUUID == "" || artifactPath == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(w, "Missing required parameters: run_uuid and path")
+		return
+	}
+
+	// Get run_id from uuid
+	var runID int
+	err := db.QueryRow("SELECT id FROM runs WHERE uuid = ?", runUUID).Scan(&runID)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, "Run not found")
+		return
+	}
+
+	// Query artifact URI and type from database
+	var artifactURI, artifactType string
+	err = db.QueryRow("SELECT uri, type FROM artifacts WHERE run_id = ? AND path = ?", runID, artifactPath).Scan(&artifactURI, &artifactType)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, "Artifact not found")
+		return
+	}
+
+	// Render template with artifact URI and type
+	data := struct {
+		ArtifactURI  string
+		ArtifactType string
+	}{
+		ArtifactURI:  artifactURI,
+		ArtifactType: artifactType,
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	tmpl, err := template.ParseFiles("templates/artifact_display.html")
+        if err != nil {
+            log.Fatalf("Failed to parse template: %v", err)
+        }
+	err = tmpl.Execute(w, data)
+	if err != nil {
+		log.Fatalf("Failed to execute template: %v", err)
+	}
+}
+
+func handleServeArtifactBlob(w http.ResponseWriter, r *http.Request) {
+        artifactURI := r.URL.Query().Get("uri")
+        if strings.HasPrefix(artifactURI, "file://") {
+                http.ServeFile(w, r, strings.TrimPrefix(artifactURI, "file://"))
+                return
+        }
 }

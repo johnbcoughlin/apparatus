@@ -18,6 +18,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "logging"))
 
 import apparatus
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')  # Non-interactive backend
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+
 
 
 def lorenz_derivatives(state, sigma, rho, beta):
@@ -56,31 +61,36 @@ def integrate_lorenz(initial_state, sigma, rho, beta, t_max=30.0, dt=0.01):
     return times, trajectory
 
 
-def create_plot(times, trajectory, title, filepath):
+def create_3d_plot(times, trajectory, title, filepath):
     """Create a 3D trajectory plot using matplotlib."""
-    try:
-        import matplotlib
-        matplotlib.use('Agg')  # Non-interactive backend
-        import matplotlib.pyplot as plt
-        from mpl_toolkits.mplot3d import Axes3D
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111, projection='3d')
 
-        fig = plt.figure(figsize=(10, 8))
-        ax = fig.add_subplot(111, projection='3d')
+    ax.plot(trajectory[:, 0], trajectory[:, 1], trajectory[:, 2],
+            linewidth=0.5, alpha=0.8)
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
+    ax.set_title(title)
 
-        ax.plot(trajectory[:, 0], trajectory[:, 1], trajectory[:, 2],
-                linewidth=0.5, alpha=0.8)
-        ax.set_xlabel('X')
-        ax.set_ylabel('Y')
-        ax.set_zlabel('Z')
-        ax.set_title(title)
+    plt.savefig(filepath, dpi=150, bbox_inches='tight')
+    plt.close()
+    return True
 
-        plt.savefig(filepath, dpi=150, bbox_inches='tight')
-        plt.close()
-        return True
-    except ImportError:
-        print("Warning: matplotlib not available, skipping plot generation")
-        return False
 
+def create_trace_plot(times, trajectory, i, filepath):
+    dim = ['X', 'Y', 'Z'][i]
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111)
+
+    ax.plot(times, trajectory[:, i])
+    ax.set_xlabel('t')
+    ax.set_ylabel(dim)
+    ax.set_title(dim)
+
+    plt.savefig(filepath, dpi=150, bbox_inches='tight')
+    plt.close()
+    return True
 
 def main():
     print("Generating Lorenz attractor runs...")
@@ -138,14 +148,18 @@ def main():
             apparatus.log_metric(run_uuid, "z", trajectory[j, 2], time_value=times[j])
 
         # Create and upload plot
-        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as f:
+        with tempfile.NamedTemporaryFile(suffix='.png') as f:
             plot_path = f.name
 
-        plot_title = f"σ={config['sigma']}, ρ={config['rho']}, β={config['beta']:.2f}"
-        if create_plot(times, trajectory, plot_title, plot_path):
-            apparatus.log_artifact(run_uuid, "plots/trajectory.png", plot_path)
-            Path(plot_path).unlink()
-            print(f"  ✓ Logged trajectory plot")
+            plot_title = f"σ={config['sigma']}, ρ={config['rho']}, β={config['beta']:.2f}"
+            if create_3d_plot(times, trajectory, plot_title, plot_path):
+                apparatus.log_artifact(run_uuid, "plots/trajectory.png", plot_path)
+                print(f"  ✓ Logged trajectory plot")
+
+            for i in range(3):
+                create_trace_plot(times, trajectory, i, plot_path)
+                dim = ['X', 'Y', 'Z'][i]
+                apparatus.log_artifact(run_uuid, f"plots/traces/{dim}.png", plot_path)
 
         print(f"  ✓ Logged {len(times)//sample_interval} metric points")
 

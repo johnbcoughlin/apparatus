@@ -10,7 +10,11 @@ run = "cd server && go build"
 sources = ["server/**/*.go", "server/templates/*.html", "server/static/*.css"]
 outputs = ["server/apparatus-server"]
 
-[tasks.test]
+[tasks.go-tests]
 depends = ["build-server"]
+run = "cd server && go test"
+
+[tasks.test]
+depends = ["build-server", "go-tests"]
 sources = ["tests/**/run_tests.sh", "tests/**/*.py"]
 run = "tests/run_tests.sh"

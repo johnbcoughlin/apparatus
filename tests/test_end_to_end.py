@@ -70,11 +70,13 @@ def test_create_and_view_run(running_server):
     apparatus.log_metric(id, "metric", 46.7, step=5)
     apparatus.log_metric(id, "metric", 88.9, step=3)
 
-    # Test home page
     with urllib.request.urlopen(f"http://localhost:8080/runs/{id}", timeout=5) as response:
         content = response.read().decode('utf-8')
         assert f"Run: my great run" in content
         assert id in content
+
+    with urllib.request.urlopen(f"http://localhost:8080/runs/{id}/overview", timeout=5) as response:
+        content = response.read().decode('utf-8')
         assert "musa" in content
         assert "88.9, 46.7" in content
 

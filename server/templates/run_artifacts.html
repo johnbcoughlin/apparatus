@@ -1,3 +1,24 @@
+{{define "tree"}}
+<ul>
+    {{range $key, $node := .Children}}
+    <li>
+    {{if .ArtifactURI}}
+        <button 
+            hx-get="/artifacts?run_uuid={{.RunUUID}}&path={{.ArtifactPath}}" 
+            hx-vals='{"artifact_uri": "{{.ArtifactURI}}"}'
+            hx-target="#artifact-display"
+            >
+        {{$key}}
+        </button>
+    {{else}}
+        {{$key}}
+        {{template "tree" $node}}
+    {{end}}
+    </li>
+    {{end}}
+</ul>
+{{end}}
+
 <!-- Tab Navigation -->
 <div style="margin-bottom: 1rem; border-bottom: 2px solid #ddd;">
         <button
@@ -15,26 +36,15 @@
         </button>
 </div>
 
-<div>
-	<h2>Artifacts</h2>
-	{{if .Artifacts}}
-	<table border="1" cellpadding="5" cellspacing="0">
-		<thead>
-			<tr>
-				<th>Path</th>
-				<th>URI</th>
-			</tr>
-		</thead>
-		<tbody>
-		{{range .Artifacts}}
-			<tr>
-				<td>{{.Path}}</td>
-				<td>{{.URI}}</td>
-			</tr>
-		{{end}}
-		</tbody>
-	</table>
-	{{else}}
-	<p>No artifacts logged for this run.</p>
-	{{end}}
+<div style="display: flex; gap: 2rem; align-items: flex-start; max-width: 100%;">
+    <div style="flex: 0 0 30%; min-width: 0;">
+        <div>
+            <h2>Artifacts</h2>
+            {{template "tree" .ArtifactsTree}}
+        </div>
+    </div>
+    <div style="flex: 0 0 70%; min-width: 0; padding-right: 2rem;">
+        <div id="artifact-display">
+        </div>
+    </div>
 </div>

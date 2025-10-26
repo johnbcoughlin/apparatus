@@ -77,18 +77,19 @@ func initDB(connString string) {
 		log.Fatalf("Failed to create metrics table: %v", err)
 	}
 
-        createArtifactsTableSQL := `
+	createArtifactsTableSQL := `
         CREATE TABLE IF NOT EXISTS artifacts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 run_id INTEGER NOT NULL,
                 path TEXT NOT NULL,
                 uri TEXT NOT NULL,
+                type TEXT NOT NULL,
                 UNIQUE(run_id, path)
         );
         `
 
-        _, err = db.Exec(createArtifactsTableSQL)
-        if err != nil {
-                log.Fatalf("Failed to create artifacts table: %v", err)
-        }
+	_, err = db.Exec(createArtifactsTableSQL)
+	if err != nil {
+		log.Fatalf("Failed to create artifacts table: %v", err)
+	}
 }

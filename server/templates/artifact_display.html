@@ -1,0 +1,5 @@
+{{if eq .ArtifactType "image"}}
+<img src="/artifacts/blob?uri={{.ArtifactURI}}">
+{{else}}
+<span>{{.ArtifactURI}}</span>
+{{end}}

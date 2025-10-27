@@ -6,6 +6,8 @@ import (
 	"flag"
 	"fmt"
 	"html/template"
+            "crypto/sha256"
+    "encoding/hex"
 	"log"
 	"net/http"
 	"strings"
@@ -507,6 +509,11 @@ type ArtifactsTreeNode struct {
         RunUUID *string
 }
 
+func hashString(s string) string {
+    h := sha256.Sum256([]byte(s))
+    return hex.EncodeToString(h[:8]) // Use first 8 bytes for shorter ID
+}
+
 func handleRunArtifacts(w http.ResponseWriter, r *http.Request, runUUID string) {
 	var runID int
 	err := db.QueryRow("SELECT id FROM runs WHERE uuid = ?", runUUID).Scan(&runID)
@@ -545,8 +552,11 @@ func handleRunArtifacts(w http.ResponseWriter, r *http.Request, runUUID string) 
 		ArtifactsTree: artifactsTree,
 	}
 
+        tmpl := template.New("run_artifacts.html").Funcs(template.FuncMap{
+                "hash": hashString,
+        })
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	tmpl, err := template.ParseFiles("templates/run_artifacts.html")
+	tmpl, err = tmpl.ParseFiles("templates/run_artifacts.html")
 	if err != nil {
 		log.Fatalf("Failed to parse template: %v", err)
 	}

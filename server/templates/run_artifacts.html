@@ -4,9 +4,10 @@
     <li>
     {{if .ArtifactURI}}
         <button 
+            id="hash-{{hash .ArtifactPath}}"
             hx-get="/artifacts?run_uuid={{.RunUUID}}&path={{.ArtifactPath}}" 
-            hx-vals='{"artifact_uri": "{{.ArtifactURI}}"}'
             hx-target="#artifact-display"
+            onclick="selectPlot('hash-{{hash .ArtifactPath}}')"
             >
         {{$key}}
         </button>
@@ -48,3 +49,22 @@
         </div>
     </div>
 </div>
+
+<script>
+    function selectPlot(id) {
+        selectedPlotId = id;
+    }
+
+    if (typeof selectedPlotId !== 'undefined') {
+        const element = document.getElementById(selectedPlotId);
+        if (element) {
+            const url = element.getAttribute('hx-get');
+            const target = element.getAttribute('hx-target');
+            
+            htmx.ajax('GET', url, {
+                target: target,
+                source: element  // This makes HTMX treat it as if the button triggered it
+            });
+        }
+    }
+</script>

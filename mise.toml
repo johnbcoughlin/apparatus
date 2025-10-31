@@ -1,3 +1,6 @@
+[tools]
+node = "22"
+
 [tasks.run-server]
 depends = ["build-server"]
 description = "Run the server"
@@ -14,7 +17,13 @@ outputs = ["server/apparatus-server"]
 depends = ["build-server"]
 run = "cd server && go test"
 
+[tasks.playwright-tests]
+description = "Run Playwright frontend tests"
+depends = ["build-server"]
+sources = ["tests/playwright/**/*.js"]
+run = "npm test"
+
 [tasks.test]
-depends = ["build-server", "go-tests"]
+depends = ["build-server", "go-tests", "playwright-tests"]
 sources = ["tests/**/run_tests.sh", "tests/**/*.py"]
 run = "tests/run_tests.sh"

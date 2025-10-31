@@ -5,8 +5,9 @@
     {{if .ArtifactURI}}
         <button 
             id="hash-{{hash .ArtifactPath}}"
-            hx-get="/artifacts?run_uuid={{.RunUUID}}&path={{.ArtifactPath}}" 
-            hx-target="#artifact-display"
+            hx-get="/runs/{{.RunUUID}}/artifacts"
+            hx-vals='{"current_artifact_path": "{{.ArtifactPath}}"}'
+            hx-target="#tab-content"
             onclick="selectPlot('hash-{{hash .ArtifactPath}}')"
             >
         {{$key}}
@@ -21,50 +22,27 @@
 {{end}}
 
 <!-- Tab Navigation -->
-<div style="margin-bottom: 1rem; border-bottom: 2px solid #ddd;">
-        <button
-                hx-get="/runs/{{.UUID}}/overview"
-                hx-target="#tab-content"
-                role="tab">
-                Overview
-        </button>
-        <button
-                hx-get="/runs/{{.UUID}}/artifacts"
-                hx-target="#tab-content"
-                role="tab"
-                class="selected">
-                Artifacts
-        </button>
-</div>
-
-<div style="display: flex; gap: 2rem; align-items: flex-start; max-width: 100%;">
-    <div style="flex: 0 0 30%; min-width: 0;">
-        <div>
-            <h2>Artifacts</h2>
-            {{template "tree" .ArtifactsTree}}
+<div id="artifacts-tab-view">
+    <div style="display: flex; gap: 2rem; align-items: flex-start; max-width: 100%;">
+        <div style="flex: 0 0 30%; min-width: 0;">
+            <div>
+                <h2>Artifacts</h2>
+                <div class="artifact-tree">
+                    {{template "tree" .ArtifactsTree}}
+                </div>
+            </div>
         </div>
-    </div>
-    <div style="flex: 0 0 70%; min-width: 0; padding-right: 2rem;">
-        <div id="artifact-display">
+        <div style="flex: 0 0 70%; min-width: 0; padding-right: 2rem;">
+            {{if .CurrentArtifact}}
+            <div id="artifact-display">
+                {{if eq .CurrentArtifact.Type "image"}}
+                <img src="/artifacts/blob?uri={{.CurrentArtifact.URI}}">
+                {{else}}
+                <span>{{.CurrentArtifact.URI}}</span>
+                {{end}}
+            </div>
+            {{end}}
         </div>
     </div>
 </div>
 
-<script>
-    function selectPlot(id) {
-        selectedPlotId = id;
-    }
-
-    if (typeof selectedPlotId !== 'undefined') {
-        const element = document.getElementById(selectedPlotId);
-        if (element) {
-            const url = element.getAttribute('hx-get');
-            const target = element.getAttribute('hx-target');
-            
-            htmx.ajax('GET', url, {
-                target: target,
-                source: element  // This makes HTMX treat it as if the button triggered it
-            });
-        }
-    }
-</script>

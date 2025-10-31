@@ -119,14 +119,99 @@ ul {
 }
 
 button[role="tab"] {
-    padding: 0.5rem 1rem; 
-    margin-right: 0.5rem; 
-    border: none; 
-    background: #eee; 
+    padding: 0.5rem 1rem;
+    margin-right: 0.5rem;
+    border: none;
+    background: #eee;
     cursor: pointer;
 }
 
 button[role="tab"].selected {
     background: #0066cc;
     color: white;
+}
+
+/* File tree styles */
+.artifact-tree {
+    background-color: white;
+    border-radius: 8px;
+    padding: 1rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.artifact-tree ul {
+    list-style: none;
+    padding-left: 0;
+    margin: 0;
+}
+
+.artifact-tree ul ul {
+    padding-left: 1.5rem;
+    margin-left: 0.25rem;
+    border-left: 1px solid #999;
+}
+
+.artifact-tree li {
+    margin: 0.1rem 0;
+    position: relative;
+}
+
+.artifact-tree li::before {
+    content: '';
+    position: absolute;
+    left: -1.5rem;
+    top: 0.6rem;
+    width: 1rem;
+    height: 1px;
+    background-color: #999;
+}
+
+.artifact-tree > ul > li::before {
+    display: none;
+}
+
+/* Folder labels */
+.artifact-tree .folder-label {
+    color: #333;
+    font-weight: 500;
+    padding: 0.1rem 0;
+    display: inline-block;
+    font-size: 1.05rem;
+}
+
+/* File buttons */
+.artifact-tree button {
+    background: none;
+    border: none;
+    color: #0066cc;
+    cursor: pointer;
+    padding: 0.1rem 0.5rem;
+    text-align: left;
+    font-size: 1.05rem;
+    font-family: inherit;
+    border-radius: 4px;
+    transition: background-color 0.15s ease;
+    width: auto;
+    display: inline-block;
+}
+
+.artifact-tree button:hover {
+    background-color: #f0f7ff;
+    text-decoration: none;
+}
+
+.artifact-tree button.selected {
+    background-color: #0066cc;
+    color: white;
+}
+
+.artifact-tree button.selected:hover {
+    background-color: #0052a3;
+}
+
+.artifact-tree button:active,
+.artifact-tree button:focus {
+    background-color: #e6f2ff;
+    outline: 2px solid #0066cc;
+    outline-offset: 1px;
 }

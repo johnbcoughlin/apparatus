@@ -326,6 +326,7 @@ type Metric struct {
 type Artifact struct {
 	Path string
 	URI  string
+        Type string
 }
 
 func handleViewRun(w http.ResponseWriter, r *http.Request) {
@@ -337,9 +338,11 @@ func handleViewRun(w http.ResponseWriter, r *http.Request) {
 	if len(parts) == 2 {
 		switch parts[1] {
 		case "overview":
+                        executeRunPageTabsTemplate(w, r, runUUID, "overview")
 			handleRunOverview(w, r, runUUID)
 			return
 		case "artifacts":
+                        executeRunPageTabsTemplate(w, r, runUUID, "artifacts")
 			handleRunArtifacts(w, r, runUUID)
 			return
 		}
@@ -371,6 +374,34 @@ func handleViewRun(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Fatalf("Failed to execute template: %v", err)
 	}
+}
+
+func executeRunPageTabsTemplate(w http.ResponseWriter, r *http.Request, runUUID string, pageName string) {
+    maybeCurrentArtifactPath := r.URL.Query().Get("current_artifact_path")
+    var currentArtifactPath *string
+    if maybeCurrentArtifactPath == "" {
+        currentArtifactPath = nil
+    } else {
+        currentArtifactPath = &maybeCurrentArtifactPath
+    }
+
+    data := struct {
+        CurrentArtifactPath *string
+        UUID string
+        PageName string
+    }{
+        CurrentArtifactPath: currentArtifactPath,
+        UUID: runUUID,
+        PageName: pageName,
+    }
+    tmpl, err := template.ParseFiles("templates/run_page_tabs.html")
+    if err != nil {
+        log.Fatalf("Failed to parse template: %v", err)
+    }
+    err = tmpl.Execute(w, data)
+    if err != nil {
+        log.Fatalf("Failed to execute template: %v", err)
+    }
 }
 
 func handleRunOverview(w http.ResponseWriter, r *http.Request, runUUID string) {
@@ -523,7 +554,7 @@ func handleRunArtifacts(w http.ResponseWriter, r *http.Request, runUUID string) 
 
 	// Query artifacts for this run
 	rows, err := db.Query(`
-		SELECT path, uri
+		SELECT path, uri, type
 		FROM artifacts
 		WHERE run_id = ?
 		ORDER BY path`, runID)
@@ -534,22 +565,37 @@ func handleRunArtifacts(w http.ResponseWriter, r *http.Request, runUUID string) 
 
 	var artifacts []Artifact
 	for rows.Next() {
-		var path, uri string
-		err := rows.Scan(&path, &uri)
+		var path, uri, ty string
+		err := rows.Scan(&path, &uri, &ty)
 		if err != nil {
 			log.Fatalf("Failed to scan artifact: %v", err)
 		}
-		artifacts = append(artifacts, Artifact{Path: path, URI: uri})
+                artifacts = append(artifacts, Artifact{Path: path, URI: uri, Type: ty})
 	}
 
         artifactsTree := assembleArtifactsTree(runUUID, artifacts)
 
+        // Pull out the current artifact for display if it's present in the request
+        currentArtifactPath := r.URL.Query().Get("current_artifact_path")
+        log.Println("current artifact:", currentArtifactPath)
+
+        var currentArtifact *Artifact = nil
+        if currentArtifactPath != "" {
+            for _, artifact := range artifacts {
+                if artifact.Path == currentArtifactPath {
+                    currentArtifact = &artifact
+                }
+            }
+        }
+
 	data := struct {
 		UUID      string
 		ArtifactsTree ArtifactsTreeNode
+                CurrentArtifact *Artifact
 	}{
 		UUID:      runUUID,
 		ArtifactsTree: artifactsTree,
+                CurrentArtifact: currentArtifact,
 	}
 
         tmpl := template.New("run_artifacts.html").Funcs(template.FuncMap{
@@ -592,9 +638,9 @@ func handleViewArtifact(w http.ResponseWriter, r *http.Request) {
 	runUUID := r.URL.Query().Get("run_uuid")
 	artifactPath := r.URL.Query().Get("path")
 
-	if runUUID == "" || artifactPath == "" {
+	if runUUID == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w, "Missing required parameters: run_uuid and path")
+		fmt.Fprintf(w, "Missing required parameter: run_uuid")
 		return
 	}
 

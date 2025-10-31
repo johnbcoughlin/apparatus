@@ -1,0 +1,28 @@
+<div style="margin-bottom: 1rem; border-bottom: 2px solid #ddd;">
+    <div 
+        {{if .CurrentArtifactPath}} 
+        hx-vals='{"current_artifact_path": "{{.CurrentArtifactPath}}"}'
+        {{end}}
+        >
+        <button
+                hx-get="/runs/{{.UUID}}/overview"
+                hx-target="#tab-content"
+                role="tab"
+                {{if eq .PageName "overview"}}
+                class="selected"
+                {{end}}
+                >
+                Overview
+        </button>
+        <button
+            hx-get="/runs/{{.UUID}}/artifacts"
+                hx-target="#tab-content"
+                role="tab"
+                {{if eq .PageName "artifacts"}}
+                class="selected"
+                {{end}}
+                >
+                Artifacts
+        </button>
+    </div>
+</div>

@@ -1,20 +1,3 @@
-<!-- Tab Navigation -->
-<div style="margin-bottom: 1rem; border-bottom: 2px solid #ddd;">
-        <button
-                hx-get="/runs/{{.UUID}}/overview"
-                hx-target="#tab-content"
-                role="tab"
-                class="selected">
-                Overview
-        </button>
-        <button
-                hx-get="/runs/{{.UUID}}/artifacts"
-                hx-target="#tab-content"
-                role="tab">
-                Artifacts
-        </button>
-</div>
-
 <div style="display: flex; gap: 2rem; align-items: flex-start; max-width: 100%;">
 	<div style="flex: 0 0 40%; min-width: 0;">
 		{{if .Parameters}}

@@ -1,5 +1,80 @@
-{{if eq .ArtifactType "image"}}
-<img src="/artifacts/blob?uri={{.ArtifactURI}}">
-{{else}}
-<span>{{.ArtifactURI}}</span>
+{{define "tree"}}
+<ul>
+    {{range $key, $node := .Children}}
+    <li>
+    {{if .ArtifactURI}}
+        <button 
+            id="hash-{{hash .ArtifactPath}}"
+            hx-get="/artifacts?run_uuid={{.RunUUID}}&path={{.ArtifactPath}}" 
+            hx-target="#artifact-artifacts-tab-view"
+            onclick="selectPlot('hash-{{hash .ArtifactPath}}')"
+            >
+        {{$key}}
+        </button>
+    {{else}}
+        {{$key}}
+        {{template "tree" $node}}
+    {{end}}
+    </li>
+    {{end}}
+</ul>
 {{end}}
+
+<div id="artifacts-tab-view">
+    <div style="display: flex; gap: 2rem; align-items: flex-start; max-width: 100%;">
+        <div style="flex: 0 0 30%; min-width: 0;">
+            <div>
+                <h2>Artifacts</h2>
+                <div class="artifact-tree">
+                    {{template "tree" .ArtifactsTree}}
+                </div>
+            </div>
+        </div>
+        <div style="flex: 0 0 70%; min-width: 0; padding-right: 2rem;">
+            {{if .CurrentArtifact}}
+            <div id="artifact-display">
+                {{if eq .CurrentArtifact.Type "image"}}
+                <img src="/artifacts/blob?uri={{.CurrentArtifact.URI}}">
+                {{else}}
+                <span>{{.CurrentArtifact.URI}}</span>
+                {{end}}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function selectPlot(id) {
+        // Remove 'selected' class from all artifact buttons
+        document.querySelectorAll('.artifact-tree button').forEach(btn => {
+            btn.classList.remove('selected');
+        });
+
+        // Add 'selected' class to clicked button
+        const element = document.getElementById(id);
+        if (element) {
+            element.classList.add('selected');
+        }
+
+        // Store the selected plot ID globally
+        selectedPlotId = id;
+    }
+
+    // On page load, restore the selected artifact if one was previously selected
+    if (typeof selectedPlotId !== 'undefined') {
+        const element = document.getElementById(selectedPlotId);
+        if (element) {
+            // Add selected class
+            element.classList.add('selected');
+
+            // Load the artifact content
+            const url = element.getAttribute('hx-get');
+            const target = element.getAttribute('hx-target');
+
+            htmx.ajax('GET', url, {
+                target: target,
+                source: element
+            });
+        }
+    }
+</script>

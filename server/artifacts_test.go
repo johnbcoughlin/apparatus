@@ -6,11 +6,11 @@ import (
 
 func TestAssembleArtifactsTree(t *testing.T) {
 	artifacts := []Artifact{
-		{"file1.txt", "abc1"},
-		{"plots/1.png", "abc2"},
-		{"plots/2.png", "abc3"},
-		{"plots/barcharts/G.png", "abc4"},
-		{"plots/barcharts/H.png", "abc5"},
+		{"file1.txt", "abc1", "text"},
+		{"plots/1.png", "abc2", "image"},
+		{"plots/2.png", "abc3", "image"},
+		{"plots/barcharts/G.png", "abc4", "image"},
+		{"plots/barcharts/H.png", "abc5", "image"},
 	}
 	result := assembleArtifactsTree("foo-uuid", artifacts)
 	if *(*result.Children["file1.txt"]).ArtifactURI != "abc1" {

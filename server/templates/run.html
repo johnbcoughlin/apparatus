@@ -4,10 +4,12 @@
 	<p>UUID: {{.UUID}}</p>
 
 	<!-- Tab Content -->
-	<div id="tab-content" hx-get="/runs/{{.UUID}}/overview" hx-trigger="load">
+	<div id="tab-content" 
+            hx-get="/runs/{{.UUID}}/overview" 
+            hx-trigger="load"
+            hx-vals='{"current_artifact": "nothing"}'
+            >
 		<!-- Content will be loaded here -->
 	</div>
 </body>
-<script>
-</script>
 </html>

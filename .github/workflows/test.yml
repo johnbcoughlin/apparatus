@@ -16,7 +16,7 @@ jobs:
     - name: Install mise
       uses: jdx/mise-action@v2
       with:
-        version: 2025.08.1
+        version: 2025.11.1
 
     - name: Install Playwright browsers
       run: mise exec -- npx playwright install --with-deps chromium

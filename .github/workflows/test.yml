@@ -1,0 +1,25 @@
+name: Test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install mise
+      uses: jdx/mise-action@v2
+      with:
+        version: 2025.08.01
+
+    - name: Install Playwright browsers
+      run: mise exec -- npx playwright install --with-deps chromium
+
+    - name: Run tests
+      run: mise test

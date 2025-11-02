@@ -1,5 +1,6 @@
 [tools]
 node = "22"
+go = "1.25"
 
 [tasks.run-server]
 depends = ["build-server"]

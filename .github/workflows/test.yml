@@ -18,6 +18,14 @@ jobs:
       with:
         version: 2025.11.1
 
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
+
+    - name: Install deps
+      run: |
+        mise install
+        npm install
+
     - name: Install Playwright browsers
       run: mise exec -- npx playwright install --with-deps chromium
 

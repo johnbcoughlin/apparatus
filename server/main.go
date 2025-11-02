@@ -1,17 +1,15 @@
 package main
 
 import (
-	"database/sql"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"html/template"
-            "crypto/sha256"
-    "encoding/hex"
 	"log"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 )
@@ -33,8 +31,8 @@ func main() {
 	http.HandleFunc("/api/metrics", handleAPILogMetric)
 	http.HandleFunc("/api/artifacts", handleAPILogArtifact)
 	http.HandleFunc("/runs/", handleViewRun)
-        http.HandleFunc("/artifacts", handleViewArtifact)
-        http.HandleFunc("/artifacts/blob", handleServeArtifactBlob)
+	http.HandleFunc("/artifacts", handleViewArtifact)
+	http.HandleFunc("/artifacts/blob", handleServeArtifactBlob)
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("./static"))))
 
 	// Start server
@@ -53,24 +51,9 @@ type Run struct {
 
 func handleHome(w http.ResponseWriter, r *http.Request) {
 	// Query all runs
-	rows, err := db.Query(`
-		SELECT uuid, name, created_at
-		FROM runs
-		ORDER BY created_at DESC`)
+	runs, err := dao.GetAllRuns()
 	if err != nil {
 		log.Fatalf("Failed to query runs: %v", err)
-	}
-	defer rows.Close()
-
-	var runs []Run
-
-	for rows.Next() {
-		var uuid, name, createdAt string
-		err := rows.Scan(&uuid, &name, &createdAt)
-		if err != nil {
-			log.Fatalf("Failed to scan run: %v", err)
-		}
-		runs = append(runs, Run{UUID: uuid, Name: name, CreatedAt: createdAt})
 	}
 
 	data := struct {
@@ -101,7 +84,7 @@ func handleAPICreateRun(w http.ResponseWriter, r *http.Request) {
 	name := r.URL.Query().Get("name")
 	runUUID := uuid.New().String()
 
-	_, err := db.Exec("INSERT INTO runs (uuid, name) VALUES (?, ?)", runUUID, name)
+	err := dao.InsertRun(runUUID, name)
 	if err != nil {
 		log.Fatalf("Failed to insert run: %v", err)
 	}
@@ -120,37 +103,35 @@ func handleAPILogParam(w http.ResponseWriter, r *http.Request) {
 	valueType := r.URL.Query().Get("type")
 
 	// Get run_id from uuid
-	var runID int
-	err := db.QueryRow("SELECT id FROM runs WHERE uuid = ?", runUUID).Scan(&runID)
+	runID, err := dao.GetRunIDByUUID(runUUID)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 
 	// Insert parameter based on type
-	var insertSQL string
-	var args []interface{}
+	var valueString *string
+	var valueBool *bool
+	var valueFloat *float64
+	var valueInt *int64
 
 	switch valueType {
 	case "string":
-		insertSQL = "INSERT OR REPLACE INTO parameters (run_id, key, value_type, value_string) VALUES (?, ?, ?, ?)"
-		args = []interface{}{runID, key, valueType, value}
+		valueString = &value
 	case "bool":
-		boolValue := 0
-		if value == "true" {
-			boolValue = 1
-		}
-		insertSQL = "INSERT OR REPLACE INTO parameters (run_id, key, value_type, value_bool) VALUES (?, ?, ?, ?)"
-		args = []interface{}{runID, key, valueType, boolValue}
+		boolVal := value == "true"
+		valueBool = &boolVal
 	case "float":
-		insertSQL = "INSERT OR REPLACE INTO parameters (run_id, key, value_type, value_float) VALUES (?, ?, ?, ?)"
-		args = []interface{}{runID, key, valueType, value}
+		var f float64
+		fmt.Sscanf(value, "%f", &f)
+		valueFloat = &f
 	case "int":
-		insertSQL = "INSERT OR REPLACE INTO parameters (run_id, key, value_type, value_int) VALUES (?, ?, ?, ?)"
-		args = []interface{}{runID, key, valueType, value}
+		var i int64
+		fmt.Sscanf(value, "%d", &i)
+		valueInt = &i
 	}
 
-	_, err = db.Exec(insertSQL, args...)
+	err = dao.UpsertParameter(runID, key, valueType, valueString, valueBool, valueFloat, valueInt)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -206,8 +187,7 @@ func handleAPILogMetric(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get run_id from uuid
-	var runID int
-	err := db.QueryRow("SELECT id FROM runs WHERE uuid = ?", req.RunUUID).Scan(&runID)
+	runID, err := dao.GetRunIDByUUID(req.RunUUID)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]string{"error": "Run not found"})
@@ -215,11 +195,9 @@ func handleAPILogMetric(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Insert metric
-	_, err = db.Exec(
-		"INSERT INTO metrics (run_id, key, value, logged_at, time, step) VALUES (?, ?, ?, ?, ?, ?)",
-		runID, req.Key, *req.Value, *req.LoggedAt, req.Time, req.Step,
-	)
+	err = dao.InsertMetric(runID, req.Key, *req.Value, *req.LoggedAt, req.Time, req.Step)
 	if err != nil {
+		log.Printf("Error inserting metric: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to insert metric"})
 		return
@@ -254,8 +232,7 @@ func handleAPILogArtifact(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get run_id from uuid
-	var runID int
-	err = db.QueryRow("SELECT id FROM runs WHERE uuid = ?", runUUID).Scan(&runID)
+	runID, err := dao.GetRunIDByUUID(runUUID)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]string{"error": "Run not found"})
@@ -279,18 +256,15 @@ func handleAPILogArtifact(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-        var artifactType string
-        if strings.HasSuffix(artifactPath, ".png") {
-            artifactType = "image"
-        } else {
-            artifactType = "unknown"
-        }
+	var artifactType string
+	if strings.HasSuffix(artifactPath, ".png") {
+		artifactType = "image"
+	} else {
+		artifactType = "unknown"
+	}
 
 	// Insert artifact metadata into database
-	_, err = db.Exec(
-		"INSERT OR REPLACE INTO artifacts (run_id, path, uri, type) VALUES (?, ?, ?, ?)",
-		runID, artifactPath, uri, artifactType,
-	)
+	err = dao.UpsertArtifact(runID, artifactPath, uri, artifactType)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to insert artifact metadata"})
@@ -326,7 +300,7 @@ type Metric struct {
 type Artifact struct {
 	Path string
 	URI  string
-        Type string
+	Type string
 }
 
 func handleViewRun(w http.ResponseWriter, r *http.Request) {
@@ -338,22 +312,22 @@ func handleViewRun(w http.ResponseWriter, r *http.Request) {
 	if len(parts) == 2 {
 		switch parts[1] {
 		case "overview":
-                        executeRunPageTabsTemplate(w, r, runUUID, "overview")
+			executeRunPageTabsTemplate(w, r, runUUID, "overview")
 			handleRunOverview(w, r, runUUID)
 			return
 		case "artifacts":
-                        executeRunPageTabsTemplate(w, r, runUUID, "artifacts")
+			executeRunPageTabsTemplate(w, r, runUUID, "artifacts")
 			handleRunArtifacts(w, r, runUUID)
 			return
 		}
 	}
 
 	// Main run page
-	var name string
-	err := db.QueryRow("SELECT name FROM runs WHERE uuid = ?", runUUID).Scan(&name)
+	run, err := dao.GetRunByUUID(runUUID)
 	if err != nil {
 		log.Fatalf("Failed to query run: %v", err)
 	}
+	name := run.Name
 
 	data := struct {
 		Title string
@@ -377,123 +351,94 @@ func handleViewRun(w http.ResponseWriter, r *http.Request) {
 }
 
 func executeRunPageTabsTemplate(w http.ResponseWriter, r *http.Request, runUUID string, pageName string) {
-    maybeCurrentArtifactPath := r.URL.Query().Get("current_artifact_path")
-    var currentArtifactPath *string
-    if maybeCurrentArtifactPath == "" {
-        currentArtifactPath = nil
-    } else {
-        currentArtifactPath = &maybeCurrentArtifactPath
-    }
+	maybeCurrentArtifactPath := r.URL.Query().Get("current_artifact_path")
+	var currentArtifactPath *string
+	if maybeCurrentArtifactPath == "" {
+		currentArtifactPath = nil
+	} else {
+		currentArtifactPath = &maybeCurrentArtifactPath
+	}
 
-    data := struct {
-        CurrentArtifactPath *string
-        UUID string
-        PageName string
-    }{
-        CurrentArtifactPath: currentArtifactPath,
-        UUID: runUUID,
-        PageName: pageName,
-    }
-    tmpl, err := template.ParseFiles("templates/run_page_tabs.html")
-    if err != nil {
-        log.Fatalf("Failed to parse template: %v", err)
-    }
-    err = tmpl.Execute(w, data)
-    if err != nil {
-        log.Fatalf("Failed to execute template: %v", err)
-    }
+	data := struct {
+		CurrentArtifactPath *string
+		UUID                string
+		PageName            string
+	}{
+		CurrentArtifactPath: currentArtifactPath,
+		UUID:                runUUID,
+		PageName:            pageName,
+	}
+	tmpl, err := template.ParseFiles("templates/run_page_tabs.html")
+	if err != nil {
+		log.Fatalf("Failed to parse template: %v", err)
+	}
+	err = tmpl.Execute(w, data)
+	if err != nil {
+		log.Fatalf("Failed to execute template: %v", err)
+	}
 }
 
 func handleRunOverview(w http.ResponseWriter, r *http.Request, runUUID string) {
-	var name string
-	var runID int
-	err := db.QueryRow("SELECT id, name FROM runs WHERE uuid = ?", runUUID).Scan(&runID, &name)
+	run, err := dao.GetRunByUUID(runUUID)
 	if err != nil {
 		log.Fatalf("Failed to query run: %v", err)
 	}
+	name := run.Name
+
+	runID, err := dao.GetRunIDByUUID(runUUID)
+	if err != nil {
+		log.Fatalf("Failed to get run ID: %v", err)
+	}
 
 	// Query parameters for this run
-	rows, err := db.Query(`
-		SELECT key, value_type, value_string, value_bool, value_float, value_int
-		FROM parameters
-		WHERE run_id = ?
-		ORDER BY key`, runID)
+	paramRows, err := dao.GetParametersByRunID(runID)
 	if err != nil {
 		log.Fatalf("Failed to query parameters: %v", err)
 	}
-	defer rows.Close()
 
 	var parameters []Parameter
-
-	for rows.Next() {
-		var key, valueType string
-		var valueString sql.NullString
-		var valueBool sql.NullInt64
-		var valueFloat sql.NullFloat64
-		var valueInt sql.NullInt64
-
-		err := rows.Scan(&key, &valueType, &valueString, &valueBool, &valueFloat, &valueInt)
-		if err != nil {
-			log.Fatalf("Failed to scan parameter: %v", err)
-		}
-
+	for _, p := range paramRows {
 		var value string
-		switch valueType {
+		switch p.ValueType {
 		case "string":
-			value = valueString.String
+			value = p.ValueString.String
 		case "bool":
-			if valueBool.Int64 == 1 {
+			if p.ValueBool.Bool {
 				value = "true"
 			} else {
 				value = "false"
 			}
 		case "float":
-			value = fmt.Sprintf("%g", valueFloat.Float64)
+			value = fmt.Sprintf("%g", p.ValueFloat.Float64)
 		case "int":
-			value = fmt.Sprintf("%d", valueInt.Int64)
+			value = fmt.Sprintf("%d", p.ValueInt.Int64)
 		}
 
-		parameters = append(parameters, Parameter{Key: key, Value: value, Type: valueType})
+		parameters = append(parameters, Parameter{Key: p.Key, Value: value, Type: p.ValueType})
 	}
 
-	// Query metrics for this run, grouped by key
-	metricRows, err := db.Query(`
-		SELECT key, value, logged_at, time, step
-		FROM metrics
-		WHERE run_id = ?
-		ORDER BY key, step, time`, runID)
+	// Query metrics for this run
+	metricRows, err := dao.GetMetricsByRunID(runID)
 	if err != nil {
 		log.Fatalf("Failed to query metrics: %v", err)
 	}
-	defer metricRows.Close()
 
 	// Group metrics by key
 	metricsMap := make(map[string][]MetricValue)
-	for metricRows.Next() {
-		var key string
-		var value float64
-		var loggedAt time.Time
-		var timeVal sql.NullFloat64
-		var step sql.NullInt64
-
-		err := metricRows.Scan(&key, &value, &loggedAt, &timeVal, &step)
-		if err != nil {
-			log.Fatalf("Failed to scan metric: %v", err)
-		}
-
+	for _, m := range metricRows {
 		timeStr := ""
-		if timeVal.Valid {
-			timeStr = fmt.Sprintf("%g", timeVal.Float64)
+		if m.Time.Valid {
+			timeStr = fmt.Sprintf("%g", m.Time.Float64)
 		}
 
 		stepStr := ""
-		if step.Valid {
-			stepStr = fmt.Sprintf("%d", step.Int64)
+		if m.Step.Valid {
+			stepStr = fmt.Sprintf("%d", m.Step.Int64)
 		}
 
-		metricsMap[key] = append(metricsMap[key], MetricValue{
-			Value:    fmt.Sprintf("%g", value),
-			LoggedAt: fmt.Sprintf("%d", loggedAt.UnixMilli()),
+		metricsMap[m.Key] = append(metricsMap[m.Key], MetricValue{
+			Value:    fmt.Sprintf("%g", m.Value),
+			LoggedAt: fmt.Sprintf("%d", m.LoggedAt.UnixMilli()),
 			Time:     timeStr,
 			Step:     stepStr,
 		})
@@ -534,73 +479,62 @@ func handleRunOverview(w http.ResponseWriter, r *http.Request, runUUID string) {
 }
 
 type ArtifactsTreeNode struct {
-	Children    map[string]*ArtifactsTreeNode
-	ArtifactURI *string
-        ArtifactPath *string
-        RunUUID *string
+	Children     map[string]*ArtifactsTreeNode
+	ArtifactURI  *string
+	ArtifactPath *string
+	RunUUID      *string
 }
 
 func hashString(s string) string {
-    h := sha256.Sum256([]byte(s))
-    return hex.EncodeToString(h[:8]) // Use first 8 bytes for shorter ID
+	h := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(h[:8]) // Use first 8 bytes for shorter ID
 }
 
 func handleRunArtifacts(w http.ResponseWriter, r *http.Request, runUUID string) {
-	var runID int
-	err := db.QueryRow("SELECT id FROM runs WHERE uuid = ?", runUUID).Scan(&runID)
+	runID, err := dao.GetRunIDByUUID(runUUID)
 	if err != nil {
 		log.Fatalf("Failed to query run: %v", err)
 	}
 
 	// Query artifacts for this run
-	rows, err := db.Query(`
-		SELECT path, uri, type
-		FROM artifacts
-		WHERE run_id = ?
-		ORDER BY path`, runID)
+	artifactRows, err := dao.GetArtifactsByRunID(runID)
 	if err != nil {
 		log.Fatalf("Failed to query artifacts: %v", err)
 	}
-	defer rows.Close()
 
 	var artifacts []Artifact
-	for rows.Next() {
-		var path, uri, ty string
-		err := rows.Scan(&path, &uri, &ty)
-		if err != nil {
-			log.Fatalf("Failed to scan artifact: %v", err)
-		}
-                artifacts = append(artifacts, Artifact{Path: path, URI: uri, Type: ty})
+	for _, a := range artifactRows {
+		artifacts = append(artifacts, Artifact{Path: a.Path, URI: a.URI, Type: a.Type})
 	}
 
-        artifactsTree := assembleArtifactsTree(runUUID, artifacts)
+	artifactsTree := assembleArtifactsTree(runUUID, artifacts)
 
-        // Pull out the current artifact for display if it's present in the request
-        currentArtifactPath := r.URL.Query().Get("current_artifact_path")
-        log.Println("current artifact:", currentArtifactPath)
+	// Pull out the current artifact for display if it's present in the request
+	currentArtifactPath := r.URL.Query().Get("current_artifact_path")
+	log.Println("current artifact:", currentArtifactPath)
 
-        var currentArtifact *Artifact = nil
-        if currentArtifactPath != "" {
-            for _, artifact := range artifacts {
-                if artifact.Path == currentArtifactPath {
-                    currentArtifact = &artifact
-                }
-            }
-        }
+	var currentArtifact *Artifact = nil
+	if currentArtifactPath != "" {
+		for _, artifact := range artifacts {
+			if artifact.Path == currentArtifactPath {
+				currentArtifact = &artifact
+			}
+		}
+	}
 
 	data := struct {
-		UUID      string
-		ArtifactsTree ArtifactsTreeNode
-                CurrentArtifact *Artifact
+		UUID            string
+		ArtifactsTree   ArtifactsTreeNode
+		CurrentArtifact *Artifact
 	}{
-		UUID:      runUUID,
-		ArtifactsTree: artifactsTree,
-                CurrentArtifact: currentArtifact,
+		UUID:            runUUID,
+		ArtifactsTree:   artifactsTree,
+		CurrentArtifact: currentArtifact,
 	}
 
-        tmpl := template.New("run_artifacts.html").Funcs(template.FuncMap{
-                "hash": hashString,
-        })
+	tmpl := template.New("run_artifacts.html").Funcs(template.FuncMap{
+		"hash": hashString,
+	})
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	tmpl, err = tmpl.ParseFiles("templates/run_artifacts.html")
 	if err != nil {
@@ -628,8 +562,8 @@ func assembleArtifactsTree(runUUID string, artifacts []Artifact) ArtifactsTreeNo
 			}
 		}
 		node.ArtifactURI = &artifact.URI
-                node.ArtifactPath = &artifact.Path
-                node.RunUUID = &runUUID
+		node.ArtifactPath = &artifact.Path
+		node.RunUUID = &runUUID
 	}
 	return root
 }
@@ -645,8 +579,7 @@ func handleViewArtifact(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get run_id from uuid
-	var runID int
-	err := db.QueryRow("SELECT id FROM runs WHERE uuid = ?", runUUID).Scan(&runID)
+	runID, err := dao.GetRunIDByUUID(runUUID)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w, "Run not found")
@@ -654,8 +587,7 @@ func handleViewArtifact(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Query artifact URI and type from database
-	var artifactURI, artifactType string
-	err = db.QueryRow("SELECT uri, type FROM artifacts WHERE run_id = ? AND path = ?", runID, artifactPath).Scan(&artifactURI, &artifactType)
+	artifact, err := dao.GetArtifactByRunIDAndPath(runID, artifactPath)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w, "Artifact not found")
@@ -667,15 +599,15 @@ func handleViewArtifact(w http.ResponseWriter, r *http.Request) {
 		ArtifactURI  string
 		ArtifactType string
 	}{
-		ArtifactURI:  artifactURI,
-		ArtifactType: artifactType,
+		ArtifactURI:  artifact.URI,
+		ArtifactType: artifact.Type,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	tmpl, err := template.ParseFiles("templates/artifact_display.html")
-        if err != nil {
-            log.Fatalf("Failed to parse template: %v", err)
-        }
+	if err != nil {
+		log.Fatalf("Failed to parse template: %v", err)
+	}
 	err = tmpl.Execute(w, data)
 	if err != nil {
 		log.Fatalf("Failed to execute template: %v", err)
@@ -683,9 +615,9 @@ func handleViewArtifact(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleServeArtifactBlob(w http.ResponseWriter, r *http.Request) {
-        artifactURI := r.URL.Query().Get("uri")
-        if strings.HasPrefix(artifactURI, "file://") {
-                http.ServeFile(w, r, strings.TrimPrefix(artifactURI, "file://"))
-                return
-        }
+	artifactURI := r.URL.Query().Get("uri")
+	if strings.HasPrefix(artifactURI, "file://") {
+		http.ServeFile(w, r, strings.TrimPrefix(artifactURI, "file://"))
+		return
+	}
 }

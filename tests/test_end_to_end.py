@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 import apparatus
 import tempfile
+import os
 
 def wait_for_server(url, max_attempts=30, interval=0.01):
     """Wait for server to be ready by polling the health endpoint."""
@@ -19,16 +20,27 @@ def wait_for_server(url, max_attempts=30, interval=0.01):
             time.sleep(interval)
     return False
 
-@pytest.fixture(scope="module")
-def running_server():
+@pytest.fixture(scope="module", params=["sqlite", "postgres"])
+def running_server(request):
     """Pytest fixture to start and stop the apparatus server for all tests in the module."""
     server_path = Path(__file__).parent.parent / "server" / "apparatus-server"
+    db_type = request.param
 
     tmpdir = tempfile.TemporaryDirectory()
-    print("tmpdir name:", tmpdir.name)
+    print(f"tmpdir name: {tmpdir.name}, database: {db_type}")
+
+    # Configure database connection string based on parameter
+    if db_type == "sqlite":
+        db_conn = f"sqlite:///{tmpdir.name}/apparatus.db"
+    else:  # postgres
+        db_conn = subprocess.run(
+            Path(__file__).parent.parent / "scripts" / "construct_test_pg_connection_string.sh",
+            capture_output=True,
+            check=True).stdout.strip()
+
     server_process = subprocess.Popen(
-        [str(server_path), 
-         "-db", f"sqlite:///{tmpdir.name}/apparatus.db",
+        [str(server_path),
+         "-db", db_conn,
          "-artifact-store-uri", f"file://{tmpdir.name}/artifacts",
          ],
         cwd=Path(__file__).parent.parent / "server"

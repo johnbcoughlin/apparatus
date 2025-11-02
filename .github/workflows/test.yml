@@ -10,6 +10,20 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: apparatus_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
     steps:
     - uses: actions/checkout@v4
 
@@ -31,3 +45,9 @@ jobs:
 
     - name: Run tests
       run: mise test
+      env:
+        PGHOST: localhost
+        PGPORT: 5432
+        PGDATABASE: apparatus_test
+        PGUSER: postgres
+        PGPASSWORD: postgres

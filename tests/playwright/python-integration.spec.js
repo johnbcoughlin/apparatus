@@ -9,7 +9,7 @@ test.describe('Apparatus End-to-End Tests', () => {
 
     // Step 2: Log parameters
     await apparatusAPI.logParam(runId, 'learning_rate', 0.001, 'float');
-    await apparatusAPI.logParam(runId, 'batch_size', 64, 'int');
+    await apparatusAPI.logParam(runId, 'batch_size', 1000, 'int');
 
     // Step 3: Log metrics
     await apparatusAPI.logMetric(runId, 'accuracy', 0.92, { step: 10 });
@@ -38,17 +38,17 @@ test.describe('Apparatus End-to-End Tests', () => {
     await page.waitForSelector('text=Parameters', { timeout: 10000 });
 
     // Step 9: Verify parameters are displayed
-    await expect(page.locator('text=learning_rate')).toBeVisible();
-    await expect(page.locator('text=0.001')).toBeVisible();
-    await expect(page.locator('text=batch_size')).toBeVisible();
-    await expect(page.locator('text=64')).toBeVisible();
+    await expect(page.getByRole('cell').filter({hasText: 'learning_rate'})).toBeVisible();
+    await expect(page.getByRole('cell').filter({hasText: '0.001'})).toBeVisible();
+    await expect(page.getByRole('cell').filter({hasText: 'batch_size'})).toBeVisible();
+    await expect(page.getByRole('cell').filter({hasText: '1000'})).toBeVisible();
 
     // Step 10: Verify metrics are displayed
     await expect(page.locator('text=Metrics')).toBeVisible();
-    await expect(page.locator('text=accuracy')).toBeVisible();
-    await expect(page.locator('text=0.92')).toBeVisible();
-    await expect(page.locator('text=loss')).toBeVisible();
-    await expect(page.locator('text=0.15')).toBeVisible();
+    await expect(page.getByRole('cell').filter({hasText: 'accuracy'})).toBeVisible();
+    await expect(page.getByRole('cell').filter({hasText: '0.92'})).toBeVisible();
+    await expect(page.getByRole('cell').filter({hasText: 'loss'})).toBeVisible();
+    await expect(page.getByRole('cell').filter({hasText: '0.15'})).toBeVisible();
 
     // Step 11: Navigate to artifacts tab by clicking the button
     await page.getByRole('tab', { name: 'Artifacts' }).click();

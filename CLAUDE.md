@@ -24,18 +24,22 @@ apparatus/
 
 ### Go Server
 ```bash
-cd server
-# TODO: Add go commands once Go is available in PATH
+mise run-server
 ```
 
-### Python Logging Library
-```bash
-cd logging
-uv run python -m logging
+### Tests
+
+#### Go tests
+```
+mise run go-tests
 ```
 
-## Next Steps
-- [ ] Initialize Go module once Go is available
-- [ ] Set up basic server structure
-- [ ] Implement experiment tracking models
-- [ ] Create frontend templates
+#### Playwright tests
+```
+mise run playwright-tests
+```
+
+#### All tests
+```
+mise test
+```

@@ -9,6 +9,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/google/uuid"
@@ -20,7 +21,13 @@ func main() {
 	artifactStoreURI := flag.String("artifact-store-uri", "file://artifacts", "URI for location to store artifacts (e.g. file:///path/to/artifacts")
 	flag.Parse()
 
-	initDB(*dbConnString)
+	// Environment variable takes precedence over command line flag
+	finalDBConnString := *dbConnString
+	if envDB := os.Getenv("APPARATUS_DB_CONNECTION_STRING"); envDB != "" {
+		finalDBConnString = envDB
+	}
+
+	initDB(finalDBConnString)
 	initArtifactStore(*artifactStoreURI)
 
 	// Define routes

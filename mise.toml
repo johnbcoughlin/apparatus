@@ -16,7 +16,8 @@ outputs = ["server/apparatus-server"]
 
 [tasks.go-tests]
 depends = ["build-server"]
-run = "cd server && go test"
+dir = "{{ config_root }}/server"
+run = "POSTGRES_TEST_DB=$(../scripts/construct_test_pg_connection_string.sh) go test"
 
 [tasks.playwright-tests]
 description = "Run Playwright frontend tests"

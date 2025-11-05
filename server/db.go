@@ -5,91 +5,52 @@ import (
 	"log"
 	"strings"
 
+	_ "github.com/lib/pq"
 	_ "github.com/mattn/go-sqlite3"
 )
 
 var db *sql.DB
+var dao DAO
 
 func initDB(connString string) {
+	var err error
+	var driverName, dataSource string
+
 	// Parse connection string
-	// Expected format: sqlite:///path/to/db.db
-	var dbPath string
 	if strings.HasPrefix(connString, "sqlite:///") {
-		dbPath = strings.TrimPrefix(connString, "sqlite:///")
+		driverName = "sqlite3"
+		dataSource = strings.TrimPrefix(connString, "sqlite:///")
+	} else if strings.HasPrefix(connString, "postgres://") || strings.HasPrefix(connString, "postgresql://") {
+		driverName = "postgres"
+		dataSource = connString
 	} else {
-		log.Fatalf("Invalid connection string format. Expected sqlite:///path/to/db.db, got: %s", connString)
+		log.Fatalf("Unsupported connection string format: %s (expected sqlite:/// or postgres://)", connString)
 	}
 
-	var err error
-	db, err = sql.Open("sqlite3", dbPath)
+	// Open database connection
+	db, err = sql.Open(driverName, dataSource)
 	if err != nil {
 		log.Fatalf("Failed to open database: %v", err)
 	}
 
-	createRunsTableSQL := `
-	CREATE TABLE IF NOT EXISTS runs (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		uuid TEXT UNIQUE NOT NULL,
-		name TEXT NOT NULL,
-		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-	);
-	`
-
-	_, err = db.Exec(createRunsTableSQL)
-	if err != nil {
-		log.Fatalf("Failed to create runs table: %v", err)
+	// Test the connection
+	if err = db.Ping(); err != nil {
+		log.Fatalf("Failed to ping database: %v", err)
 	}
 
-	createParametersTableSQL := `
-	CREATE TABLE IF NOT EXISTS parameters (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		run_id INTEGER NOT NULL,
-		key TEXT NOT NULL,
-		value_type TEXT NOT NULL,
-		value_string TEXT,
-		value_bool INTEGER,
-		value_float REAL,
-		value_int INTEGER,
-		UNIQUE(run_id, key)
-	);
-	`
-
-	_, err = db.Exec(createParametersTableSQL)
-	if err != nil {
-		log.Fatalf("Failed to create parameters table: %v", err)
+	// Create appropriate DAO
+	if driverName == "sqlite3" {
+		dao = NewSQLiteDAO(db)
+	} else if driverName == "postgres" {
+		dao = NewPostgresDAO(db)
+	} else {
+		log.Fatalf("Unsupported database driver: %s", driverName)
 	}
 
-	createMetricsTableSQL := `
-        CREATE TABLE IF NOT EXISTS metrics (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                run_id INTEGER NOT NULL,
-                key TEXT NOT NULL,
-                value REAL NOT NULL,
-                logged_at TIMESTAMP NOT NULL,
-                time REAL,
-                step INTEGER,
-                UNIQUE(run_id, key, time, step)
-        );
-        `
-
-	_, err = db.Exec(createMetricsTableSQL)
-	if err != nil {
-		log.Fatalf("Failed to create metrics table: %v", err)
+	// Create all tables
+	if err = dao.CreateTables(); err != nil {
+		log.Fatalf("Failed to create tables: %v", err)
 	}
 
-	createArtifactsTableSQL := `
-        CREATE TABLE IF NOT EXISTS artifacts (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                run_id INTEGER NOT NULL,
-                path TEXT NOT NULL,
-                uri TEXT NOT NULL,
-                type TEXT NOT NULL,
-                UNIQUE(run_id, path)
-        );
-        `
-
-	_, err = db.Exec(createArtifactsTableSQL)
-	if err != nil {
-		log.Fatalf("Failed to create artifacts table: %v", err)
-	}
+	log.Printf("Database initialized with driver: %s", driverName)
 }

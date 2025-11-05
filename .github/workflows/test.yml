@@ -44,7 +44,7 @@ jobs:
       run: mise exec -- npx playwright install --with-deps chromium
 
     - name: Run tests
-      run: mise test
+      run: mise --jobs 1 test
       env:
         PGHOST: localhost
         PGPORT: 5432

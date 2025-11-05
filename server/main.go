@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"html/template"
+	"io/fs"
 	"log"
 	"net/http"
 	"strings"
@@ -33,7 +34,13 @@ func main() {
 	http.HandleFunc("/runs/", handleViewRun)
 	http.HandleFunc("/artifacts", handleViewArtifact)
 	http.HandleFunc("/artifacts/blob", handleServeArtifactBlob)
-	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("./static"))))
+
+	// Serve static files from embedded or filesystem
+	staticFS, err := fs.Sub(templateFS, "static")
+	if err != nil {
+		log.Fatalf("Failed to get static subdirectory: %v", err)
+	}
+	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
 
 	// Start server
 	port := "8080"
@@ -65,7 +72,7 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	tmpl, err := template.ParseFiles("templates/header.html", "templates/home.html")
+	tmpl, err := template.ParseFS(templateFS, "templates/header.html", "templates/home.html")
 	if err != nil {
 		log.Fatalf("Failed to parse template: %v", err)
 	}
@@ -340,7 +347,7 @@ func handleViewRun(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	tmpl, err := template.ParseFiles("templates/header.html", "templates/run.html")
+	tmpl, err := template.ParseFS(templateFS, "templates/header.html", "templates/run.html")
 	if err != nil {
 		log.Fatalf("Failed to parse template: %v", err)
 	}
@@ -368,7 +375,7 @@ func executeRunPageTabsTemplate(w http.ResponseWriter, r *http.Request, runUUID 
 		UUID:                runUUID,
 		PageName:            pageName,
 	}
-	tmpl, err := template.ParseFiles("templates/run_page_tabs.html")
+	tmpl, err := template.ParseFS(templateFS, "templates/run_page_tabs.html")
 	if err != nil {
 		log.Fatalf("Failed to parse template: %v", err)
 	}
@@ -468,7 +475,7 @@ func handleRunOverview(w http.ResponseWriter, r *http.Request, runUUID string) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	tmpl, err := template.ParseFiles("templates/run_overview.html")
+	tmpl, err := template.ParseFS(templateFS, "templates/run_overview.html")
 	if err != nil {
 		log.Fatalf("Failed to parse template: %v", err)
 	}
@@ -536,7 +543,7 @@ func handleRunArtifacts(w http.ResponseWriter, r *http.Request, runUUID string) 
 		"hash": hashString,
 	})
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	tmpl, err = tmpl.ParseFiles("templates/run_artifacts.html")
+	tmpl, err = tmpl.ParseFS(templateFS, "templates/run_artifacts.html")
 	if err != nil {
 		log.Fatalf("Failed to parse template: %v", err)
 	}
@@ -604,7 +611,7 @@ func handleViewArtifact(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	tmpl, err := template.ParseFiles("templates/artifact_display.html")
+	tmpl, err := template.ParseFS(templateFS, "templates/artifact_display.html")
 	if err != nil {
 		log.Fatalf("Failed to parse template: %v", err)
 	}

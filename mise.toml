@@ -2,17 +2,20 @@
 node = "22"
 go = "1.25"
 
+[tasks.build-server]
+description = "Build the server binary"
+sources = ["server/**/*.go", "server/templates/*.html", "server/static/*.css"]
+outputs = ["server/apparatus-server"]
+run = '''
+cd server
+go build
+'''
+
 [tasks.run-server]
 depends = ["build-server"]
 description = "Run the server"
 dir = "{{ config_root }}/server"
 run = "./apparatus-server -db sqlite:///{{ config_root}}/apparatus.db -artifact-store-uri file://{{config_root}}/artifacts"
-
-[tasks.build-server]
-description = "Build the server binary"
-run = "cd server && go build"
-sources = ["server/**/*.go", "server/templates/*.html", "server/static/*.css"]
-outputs = ["server/apparatus-server"]
 
 [tasks.go-tests]
 depends = ["build-server"]
@@ -29,3 +32,13 @@ run = "npm test"
 depends = ["build-server", "go-tests", "playwright-tests"]
 sources = ["tests/**/run_tests.sh", "tests/**/*.py"]
 run = "tests/run_tests.sh"
+
+[tasks.build-server-static-binary]
+description = "Build the server binary"
+sources = ["server/**/*.go", "server/templates/*.html", "server/static/*.css"]
+outputs = ["dist/apparatus"]
+run = '''
+cd server
+go build -o ../dist/apparatus -tags embed_templates
+'''
+

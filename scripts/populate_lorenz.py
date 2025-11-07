@@ -95,6 +95,10 @@ def create_trace_plot(times, trajectory, i, filepath):
 def main():
     print("Generating Lorenz attractor runs...")
 
+    # Get tracking URI from environment or use default
+    import os
+    tracking_uri = os.environ.get("APPARATUS_TRACKING_URI", "http://localhost:8080")
+
     # Define 10 different configurations
     configs = [
         # Classic Lorenz attractor
@@ -121,15 +125,15 @@ def main():
         print(f"\nRun {i+1}/10: {run_name}")
 
         # Create run
-        run_uuid = apparatus.create_run(run_name)
+        run_uuid = apparatus.create_run(run_name, tracking_uri=tracking_uri)
 
         # Log parameters
-        apparatus.log_param(run_uuid, "sigma", config["sigma"])
-        apparatus.log_param(run_uuid, "rho", config["rho"])
-        apparatus.log_param(run_uuid, "beta", config["beta"])
-        apparatus.log_param(run_uuid, "x0", config["x0"])
-        apparatus.log_param(run_uuid, "y0", config["y0"])
-        apparatus.log_param(run_uuid, "z0", config["z0"])
+        apparatus.log_param(run_uuid, "sigma", config["sigma"], tracking_uri=tracking_uri)
+        apparatus.log_param(run_uuid, "rho", config["rho"], tracking_uri=tracking_uri)
+        apparatus.log_param(run_uuid, "beta", config["beta"], tracking_uri=tracking_uri)
+        apparatus.log_param(run_uuid, "x0", config["x0"], tracking_uri=tracking_uri)
+        apparatus.log_param(run_uuid, "y0", config["y0"], tracking_uri=tracking_uri)
+        apparatus.log_param(run_uuid, "z0", config["z0"], tracking_uri=tracking_uri)
 
         # Integrate
         initial_state = np.array([config["x0"], config["y0"], config["z0"]])
@@ -143,9 +147,9 @@ def main():
         # Log metrics - sample every 100 steps to avoid too many data points
         sample_interval = 10
         for j in range(0, len(times), sample_interval):
-            apparatus.log_metric(run_uuid, "x", trajectory[j, 0], time_value=times[j])
-            apparatus.log_metric(run_uuid, "y", trajectory[j, 1], time_value=times[j])
-            apparatus.log_metric(run_uuid, "z", trajectory[j, 2], time_value=times[j])
+            apparatus.log_metric(run_uuid, "x", trajectory[j, 0], time_value=times[j], tracking_uri=tracking_uri)
+            apparatus.log_metric(run_uuid, "y", trajectory[j, 1], time_value=times[j], tracking_uri=tracking_uri)
+            apparatus.log_metric(run_uuid, "z", trajectory[j, 2], time_value=times[j], tracking_uri=tracking_uri)
 
         # Create and upload plot
         with tempfile.NamedTemporaryFile(suffix='.png') as f:
@@ -153,13 +157,13 @@ def main():
 
             plot_title = f"σ={config['sigma']}, ρ={config['rho']}, β={config['beta']:.2f}"
             if create_3d_plot(times, trajectory, plot_title, plot_path):
-                apparatus.log_artifact(run_uuid, "plots/trajectory.png", plot_path)
+                apparatus.log_artifact(run_uuid, "plots/trajectory.png", plot_path, tracking_uri=tracking_uri)
                 print(f"  ✓ Logged trajectory plot")
 
             for i in range(3):
                 create_trace_plot(times, trajectory, i, plot_path)
                 dim = ['X', 'Y', 'Z'][i]
-                apparatus.log_artifact(run_uuid, f"plots/traces/{dim}.png", plot_path)
+                apparatus.log_artifact(run_uuid, f"plots/traces/{dim}.png", plot_path, tracking_uri=tracking_uri)
 
         print(f"  ✓ Logged {len(times)//sample_interval} metric points")
 

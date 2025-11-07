@@ -5,14 +5,23 @@ import time
 from datetime import datetime
 
 
+def http_request_response_json(req, action):
+    try:
+        with urllib.request.urlopen(req) as response:
+            data = json.loads(response.read().decode('utf-8'))
+            return data
+    except urllib.error.HTTPError as e:
+        raise RuntimeError(f"Failed to {action}: HTTP {e.code} - {e.reason}\n{e.read()}")
+    except urllib.error.URLError as e:
+        raise RuntimeError(f"Failed to {action}: {e.reason}")
+
+
 def create_run(name, tracking_uri="http://localhost:8080"):
     """Create a new run and return its UUID."""
     url = f"{tracking_uri}/api/runs?name={urllib.parse.quote(name)}"
 
     req = urllib.request.Request(url, method="POST")
-    with urllib.request.urlopen(req) as response:
-        data = json.loads(response.read().decode('utf-8'))
-        return data["id"]
+    return http_request_response_json(req, "create run")["id"]
 
 
 def log_param(run_uuid, key, value, tracking_uri="http://localhost:8080"):
@@ -36,14 +45,7 @@ def log_param(run_uuid, key, value, tracking_uri="http://localhost:8080"):
     url = f"{tracking_uri}/api/params?run_uuid={urllib.parse.quote(run_uuid)}&key={urllib.parse.quote(key)}&value={urllib.parse.quote(value_str)}&type={value_type}"
 
     req = urllib.request.Request(url, method="POST")
-    try:
-        with urllib.request.urlopen(req) as response:
-            if response.status != 200:
-                raise RuntimeError(f"Failed to log parameter: HTTP {response.status}")
-            data = json.loads(response.read().decode('utf-8'))
-            return data["status"]
-    except urllib.error.HTTPError as e:
-        raise RuntimeError(f"Failed to log parameter: HTTP {e.code}")
+    http_request_response_json(req, "log parameter")
 
 
 def log_metric(run_uuid, key, value, logged_at=None, time_value=None, step=None, tracking_uri="http://localhost:8080"):
@@ -85,22 +87,7 @@ def log_metric(run_uuid, key, value, logged_at=None, time_value=None, step=None,
     req = urllib.request.Request(url, data=data, method="POST")
     req.add_header('Content-Type', 'application/json')
 
-    try:
-        with urllib.request.urlopen(req) as response:
-            if response.status != 200:
-                raise RuntimeError(f"Failed to log metric: HTTP {response.status}")
-            result = json.loads(response.read().decode('utf-8'))
-            return result["status"]
-    except urllib.error.HTTPError as e:
-        error_body = e.read().decode('utf-8')
-        try:
-            error_data = json.loads(error_body)
-            if "missing_fields" in error_data:
-                raise RuntimeError(f"Failed to log metric: {error_data['error']} - {error_data['missing_fields']}")
-            else:
-                raise RuntimeError(f"Failed to log metric: {error_data.get('error', 'Unknown error')}")
-        except json.JSONDecodeError:
-            raise RuntimeError(f"Failed to log metric: HTTP {e.code}")
+    http_request_response_json(req, "log metric")
 
 
 def log_artifact(run_uuid, path, file_path, tracking_uri="http://localhost:8080"):
@@ -155,16 +142,4 @@ def log_artifact(run_uuid, path, file_path, tracking_uri="http://localhost:8080"
     req = Request(url, data=body, method="POST")
     req.add_header("Content-Type", f"multipart/form-data; boundary={boundary}")
 
-    try:
-        with urlopen(req) as response:
-            if response.status != 200:
-                raise RuntimeError(f"Failed to log artifact: HTTP {response.status}")
-            result = json.loads(response.read().decode('utf-8'))
-            return result["status"]
-    except HTTPError as e:
-        error_body = e.read().decode('utf-8')
-        try:
-            error_data = json.loads(error_body)
-            raise RuntimeError(f"Failed to log artifact: {error_data.get('error', 'Unknown error')}")
-        except json.JSONDecodeError:
-            raise RuntimeError(f"Failed to log artifact: HTTP {e.code}")
+    http_request_response_json(req, "log artifact")

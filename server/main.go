@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+        "time"
 	"flag"
 	"fmt"
 	"html/template"
@@ -32,15 +33,15 @@ func main() {
 	initArtifactStore(*artifactStoreURI)
 
 	// Define routes
-	http.HandleFunc("/", handleHome)
-	http.HandleFunc("/health", handleHealth)
-	http.HandleFunc("/api/runs", handleAPICreateRun)
-	http.HandleFunc("/api/params", handleAPILogParam)
-	http.HandleFunc("/api/metrics", handleAPILogMetric)
-	http.HandleFunc("/api/artifacts", handleAPILogArtifact)
-	http.HandleFunc("/runs/", handleViewRun)
-	http.HandleFunc("/artifacts", handleViewArtifact)
-	http.HandleFunc("/artifacts/blob", handleServeArtifactBlob)
+	http.Handle("/", LoggerMiddleware(http.HandlerFunc(handleHome)))
+	http.Handle("/health", LoggerMiddleware(http.HandlerFunc(handleHealth)))
+	http.Handle("/api/runs", LoggerMiddleware(http.HandlerFunc(handleAPICreateRun)))
+	http.Handle("/api/params", LoggerMiddleware(http.HandlerFunc(handleAPILogParam)))
+	http.Handle("/api/metrics", LoggerMiddleware(http.HandlerFunc(handleAPILogMetric)))
+	http.Handle("/api/artifacts", LoggerMiddleware(http.HandlerFunc(handleAPILogArtifact)))
+	http.Handle("/runs/", LoggerMiddleware(http.HandlerFunc(handleViewRun)))
+	http.Handle("/artifacts", LoggerMiddleware(http.HandlerFunc(handleViewArtifact)))
+	http.Handle("/artifacts/blob", LoggerMiddleware(http.HandlerFunc(handleServeArtifactBlob)))
 
 	// Serve static files from embedded or filesystem
 	staticFS, err := fs.Sub(templateFS, "static")
@@ -61,6 +62,37 @@ type Run struct {
 	UUID      string
 	Name      string
 	CreatedAt string
+}
+
+func LoggerMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+
+		// Create a custom ResponseWriter to capture the status code
+		lrw := &loggingResponseWriter{ResponseWriter: w}
+
+		// Call the next handler in the chain
+		next.ServeHTTP(lrw, r)
+
+		// Log the request and response details
+		log.Printf(
+			"Method: %s, Path: %s, Status: %d, Latency: %v",
+			r.Method,
+			r.URL.Path,
+			lrw.statusCode,
+			time.Since(start),
+		)
+	})
+}
+
+type loggingResponseWriter struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+func (lrw *loggingResponseWriter) WriteHeader(code int) {
+	lrw.statusCode = code
+	lrw.ResponseWriter.WriteHeader(code)
 }
 
 func handleHome(w http.ResponseWriter, r *http.Request) {

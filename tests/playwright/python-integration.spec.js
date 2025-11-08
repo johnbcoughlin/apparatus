@@ -12,8 +12,8 @@ test.describe('Apparatus End-to-End Tests', () => {
     await apparatusAPI.logParam(runId, 'batch_size', 1000, 'int');
 
     // Step 3: Log metrics
-    await apparatusAPI.logMetric(runId, 'accuracy', 0.92, { step: 10 });
-    await apparatusAPI.logMetric(runId, 'loss', 0.15, { step: 10 });
+    await apparatusAPI.logMetric(runId, 'accuracy', 10, 0.92);
+    await apparatusAPI.logMetric(runId, 'loss', 10, 0.15);
 
     // Step 4: Upload an artifact
     const artifactContent = 'Model training completed successfully\nFinal accuracy: 0.92\n';

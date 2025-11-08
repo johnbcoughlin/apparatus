@@ -146,10 +146,9 @@ def main():
 
         # Log metrics - sample every 100 steps to avoid too many data points
         sample_interval = 10
-        for j in range(0, len(times), sample_interval):
-            apparatus.log_metric(run_uuid, "x", trajectory[j, 0], time_value=times[j], tracking_uri=tracking_uri)
-            apparatus.log_metric(run_uuid, "y", trajectory[j, 1], time_value=times[j], tracking_uri=tracking_uri)
-            apparatus.log_metric(run_uuid, "z", trajectory[j, 2], time_value=times[j], tracking_uri=tracking_uri)
+        apparatus.log_metrics(run_uuid, "x", y_values=trajectory[:, 0], x_values=times, tracking_uri=tracking_uri)
+        apparatus.log_metrics(run_uuid, "y", y_values=trajectory[:, 1], x_values=times, tracking_uri=tracking_uri)
+        apparatus.log_metrics(run_uuid, "z", y_values=trajectory[:, 2], x_values=times, tracking_uri=tracking_uri)
 
         # Create and upload plot
         with tempfile.NamedTemporaryFile(suffix='.png') as f:

@@ -48,16 +48,15 @@ export const test = base.extend({
        * Log a metric
        * @param {string} runUuid - Run UUID
        * @param {string} key - Metric key
-       * @param {number} value - Metric value
-       * @param {object} options - Optional: step, time
+       * @param {number} xValue - X-axis value (step/time)
+       * @param {number} yValue - Y-axis value (metric value)
        */
-      async logMetric(runUuid, key, value, options = {}) {
+      async logMetric(runUuid, key, xValue, yValue) {
         const body = {
           run_uuid: runUuid,
           key,
-          value,
-          logged_at: Date.now(),
-          ...options
+          values: [{ x_value: xValue, y_value: yValue }],
+          logged_at_epoch_millis: Date.now()
         };
         const response = await apiContext.post('/api/metrics', {
           data: body

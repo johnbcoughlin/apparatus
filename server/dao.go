@@ -18,7 +18,7 @@ type DAO interface {
 	GetParametersByRunID(runID int) ([]ParameterRow, error)
 
 	// Metric operations
-	InsertMetric(runID int, key string, value float64, loggedAt int64, time *float64, step *int) error
+	InsertMetrics(runID int, key string, xValues []float64, yValues []float64, loggedAt int64) error
 	GetMetricsByRunID(runID int) ([]MetricRow, error)
 
 	// Artifact operations
@@ -48,10 +48,9 @@ type ParameterRow struct {
 // MetricRow represents a row in the metrics table
 type MetricRow struct {
 	Key      string
-	Value    float64
+	XValue   float64
+	YValue   float64
 	LoggedAt time.Time
-	Time     sql.NullFloat64
-	Step     sql.NullInt64
 }
 
 // ArtifactRow represents a row in the artifacts table

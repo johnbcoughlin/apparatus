@@ -12,12 +12,6 @@ import (
 
 // testDAOImplementation runs a comprehensive test suite for a DAO implementation
 func testDAOImplementation(t *testing.T, dao DAO) {
-	// Test CreateTables
-	err := dao.CreateTables()
-	if err != nil {
-		t.Fatalf("CreateTables failed: %v", err)
-	}
-
 	// Test InsertRun and GetRunByUUID
 	runUUID := "test-run-uuid-123"
 	runName := "Test Run"

@@ -7,9 +7,6 @@ import (
 
 // DAO defines the interface for database operations
 type DAO interface {
-	// Schema operations
-	CreateTables() error
-
 	// Run operations
 	InsertRun(uuid, name string) error
 	GetRunByUUID(uuid string) (*Run, error)

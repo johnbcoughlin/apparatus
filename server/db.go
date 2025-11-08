@@ -3,10 +3,15 @@ package main
 import (
 	"database/sql"
 	"log"
+	
 	"strings"
 
 	_ "github.com/lib/pq"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/golang-migrate/migrate/v4"
+    	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+    	_ "github.com/golang-migrate/migrate/v4/database/sqlite"
+    	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
 var db *sql.DB
@@ -38,6 +43,14 @@ func initDB(connString string) {
 		log.Fatalf("Failed to ping database: %v", err)
 	}
 
+	m, err := migrate.New("file://migrations/" + driverName, connString)
+	if err != nil {
+		log.Fatalf("Failed to create migrator: %v", err)
+	}
+	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		log.Fatalf("Failed to run migrations: %v", err)
+	}
+
 	// Create appropriate DAO
 	if driverName == "sqlite3" {
 		dao = NewSQLiteDAO(db)
@@ -45,11 +58,6 @@ func initDB(connString string) {
 		dao = NewPostgresDAO(db)
 	} else {
 		log.Fatalf("Unsupported database driver: %s", driverName)
-	}
-
-	// Create all tables
-	if err = dao.CreateTables(); err != nil {
-		log.Fatalf("Failed to create tables: %v", err)
 	}
 
 	log.Printf("Database initialized with driver: %s", driverName)

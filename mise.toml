@@ -1,6 +1,7 @@
 [tools]
 node = "22"
 go = "1.25"
+"go:github.com/golang-migrate/migrate/v4/cmd/migrate" = {version = "latest", tags="postgres"}
 
 [tasks.build-server]
 description = "Build the server binary"

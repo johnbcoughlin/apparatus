@@ -79,8 +79,7 @@ def test_create_and_view_run(running_server):
     id = apparatus.create_run("my great run")
     apparatus.log_param(id, "param", "musa")
 
-    apparatus.log_metric(id, "metric", 46.7, step=5)
-    apparatus.log_metric(id, "metric", 88.9, step=3)
+    apparatus.log_metrics(id, "metric", [5, 3], [46.7, 88.9])
 
     with urllib.request.urlopen(f"http://localhost:8080/runs/{id}", timeout=5) as response:
         content = response.read().decode('utf-8')

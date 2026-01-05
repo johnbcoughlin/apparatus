@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-        "time"
 	"flag"
 	"fmt"
 	"html/template"
@@ -13,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -37,7 +37,7 @@ func main() {
 	http.Handle("/health", LoggerMiddleware(http.HandlerFunc(handleHealth)))
 	http.Handle("/api/runs", LoggerMiddleware(http.HandlerFunc(handleAPICreateRun)))
 	http.Handle("/api/params", LoggerMiddleware(http.HandlerFunc(handleAPILogParam)))
-	http.Handle("/api/metrics", LoggerMiddleware(http.HandlerFunc(handleAPILogMetric)))
+	http.Handle("/api/metrics", LoggerMiddleware(http.HandlerFunc(handleAPILogMetrics)))
 	http.Handle("/api/artifacts", LoggerMiddleware(http.HandlerFunc(handleAPILogArtifact)))
 	http.Handle("/runs/", LoggerMiddleware(http.HandlerFunc(handleViewRun)))
 	http.Handle("/artifacts", LoggerMiddleware(http.HandlerFunc(handleViewArtifact)))
@@ -187,19 +187,21 @@ func handleAPILogParam(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
-func handleAPILogMetric(w http.ResponseWriter, r *http.Request) {
+func handleAPILogMetrics(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
 
+	type MetricVal struct {
+		XValue float64 `json:"x_value"`
+		YValue float64 `json:"y_value"`
+	}
 	var req struct {
-		RunUUID  string   `json:"run_uuid"`
-		Key      string   `json:"key"`
-		Value    *float64 `json:"value,omitempty"`
-		LoggedAt *int64   `json:"logged_at,omitempty"`
-		Time     *float64 `json:"time,omitempty"`
-		Step     *int     `json:"step,omitempty"`
+		RunUUID             string       `json:"run_uuid"`
+		Key                 string       `json:"key"`
+		Values              *[]MetricVal `json:"values,omitempty"`
+		LoggedAtEpochMillis *int64       `json:"logged_at_epoch_millis,omitempty"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -216,11 +218,11 @@ func handleAPILogMetric(w http.ResponseWriter, r *http.Request) {
 	if req.Key == "" {
 		missing = append(missing, "key")
 	}
-	if req.Value == nil {
-		missing = append(missing, "value")
-	}
-	if req.LoggedAt == nil {
-		missing = append(missing, "logged_at")
+        if req.Values == nil {
+                missing = append(missing, "values")
+        }
+	if req.LoggedAtEpochMillis == nil {
+		missing = append(missing, "logged_at_epoch_millis")
 	}
 
 	if len(missing) > 0 {
@@ -240,8 +242,16 @@ func handleAPILogMetric(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	nValues := len(*req.Values)
+	xValues := make([]float64, nValues, nValues)
+	yValues := make([]float64, nValues, nValues)
+	for i, metricVal := range *req.Values {
+		xValues[i] = metricVal.XValue
+		yValues[i] = metricVal.YValue
+	}
+
 	// Insert metric
-	err = dao.InsertMetric(runID, req.Key, *req.Value, *req.LoggedAt, req.Time, req.Step)
+	err = dao.InsertMetrics(runID, req.Key, xValues, yValues, *req.LoggedAtEpochMillis)
 	if err != nil {
 		log.Printf("Error inserting metric: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -332,10 +342,9 @@ type Parameter struct {
 }
 
 type MetricValue struct {
-	Value    string
+	XValue   string
+	YValue   string
 	LoggedAt string
-	Time     string
-	Step     string
 }
 
 type Metric struct {
@@ -472,21 +481,10 @@ func handleRunOverview(w http.ResponseWriter, r *http.Request, runUUID string) {
 	// Group metrics by key
 	metricsMap := make(map[string][]MetricValue)
 	for _, m := range metricRows {
-		timeStr := ""
-		if m.Time.Valid {
-			timeStr = fmt.Sprintf("%g", m.Time.Float64)
-		}
-
-		stepStr := ""
-		if m.Step.Valid {
-			stepStr = fmt.Sprintf("%d", m.Step.Int64)
-		}
-
 		metricsMap[m.Key] = append(metricsMap[m.Key], MetricValue{
-			Value:    fmt.Sprintf("%g", m.Value),
+			XValue:   fmt.Sprintf("%g", m.XValue),
+			YValue:   fmt.Sprintf("%g", m.YValue),
 			LoggedAt: fmt.Sprintf("%d", m.LoggedAt.UnixMilli()),
-			Time:     timeStr,
-			Step:     stepStr,
 		})
 	}
 

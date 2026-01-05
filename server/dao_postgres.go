@@ -2,7 +2,11 @@ package main
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
+	"github.com/lib/pq"
+	"log"
+	"time"
 )
 
 // PostgresDAO implements the DAO interface for PostgreSQL
@@ -13,55 +17,6 @@ type PostgresDAO struct {
 // NewPostgresDAO creates a new Postgres DAO
 func NewPostgresDAO(db *sql.DB) *PostgresDAO {
 	return &PostgresDAO{db: db}
-}
-
-// CreateTables creates all required tables for Postgres
-func (d *PostgresDAO) CreateTables() error {
-	tables := []string{
-		`CREATE TABLE IF NOT EXISTS runs (
-			id SERIAL PRIMARY KEY,
-			uuid TEXT UNIQUE NOT NULL,
-			name TEXT NOT NULL,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-		)`,
-		`CREATE TABLE IF NOT EXISTS parameters (
-			id SERIAL PRIMARY KEY,
-			run_id INTEGER NOT NULL,
-			key TEXT NOT NULL,
-			value_type TEXT NOT NULL,
-			value_string TEXT,
-			value_bool BOOLEAN,
-			value_float DOUBLE PRECISION,
-			value_int INTEGER,
-			UNIQUE(run_id, key)
-		)`,
-		`CREATE TABLE IF NOT EXISTS metrics (
-			id SERIAL PRIMARY KEY,
-			run_id INTEGER NOT NULL,
-			key TEXT NOT NULL,
-			value DOUBLE PRECISION NOT NULL,
-			logged_at TIMESTAMP NOT NULL,
-			time DOUBLE PRECISION,
-			step INTEGER,
-			UNIQUE(run_id, key, time, step)
-		)`,
-		`CREATE TABLE IF NOT EXISTS artifacts (
-			id SERIAL PRIMARY KEY,
-			run_id INTEGER NOT NULL,
-			path TEXT NOT NULL,
-			uri TEXT NOT NULL,
-			type TEXT NOT NULL,
-			UNIQUE(run_id, path)
-		)`,
-	}
-
-	for _, sql := range tables {
-		if _, err := d.db.Exec(sql); err != nil {
-			return fmt.Errorf("failed to create table: %w", err)
-		}
-	}
-
-	return nil
 }
 
 // InsertRun inserts a new run
@@ -184,21 +139,46 @@ func (d *PostgresDAO) GetParametersByRunID(runID int) ([]ParameterRow, error) {
 }
 
 // InsertMetric inserts a new metric
-func (d *PostgresDAO) InsertMetric(runID int, key string, value float64, loggedAt int64, time *float64, step *int) error {
-	_, err := d.db.Exec(
-		"INSERT INTO metrics (run_id, key, value, logged_at, time, step) VALUES ($1, $2, $3, to_timestamp($4 / 1000.0), $5, $6)",
-		runID, key, value, loggedAt, time, step,
-	)
+func (d *PostgresDAO) InsertMetrics(runID int, key string, xValues []float64, yValues []float64, loggedAtEpochMillis int64) error {
+	if len(xValues) != len(yValues) {
+		return errors.New("xValues and yValues must have the same length")
+	}
+
+	txn, err := d.db.Begin()
+	if err != nil {
+		return err
+	}
+
+	stmt, err := txn.Prepare(pq.CopyIn("metrics", "run_id", "key", "logged_at", "x_value", "y_value"))
+	if err != nil {
+		return err
+	}
+
+	for i := range len(xValues) {
+		stmt.Exec(runID, key, time.UnixMilli(loggedAtEpochMillis).UTC(),
+			xValues[i], yValues[i])
+		if err != nil {
+			log.Printf("Error inserting metric: %v", err)
+			return err
+		}
+	}
+
+	err = stmt.Close()
+	if err != nil {
+		return err
+	}
+
+	err = txn.Commit()
 	return err
 }
 
 // GetMetricsByRunID retrieves all metrics for a run
 func (d *PostgresDAO) GetMetricsByRunID(runID int) ([]MetricRow, error) {
 	rows, err := d.db.Query(`
-		SELECT key, value, logged_at, time, step
+		SELECT key, x_value, y_value, logged_at
 		FROM metrics
 		WHERE run_id = $1
-		ORDER BY key, step, time
+		ORDER BY key, x_value
 	`, runID)
 	if err != nil {
 		return nil, err
@@ -208,7 +188,7 @@ func (d *PostgresDAO) GetMetricsByRunID(runID int) ([]MetricRow, error) {
 	var metrics []MetricRow
 	for rows.Next() {
 		var m MetricRow
-		if err := rows.Scan(&m.Key, &m.Value, &m.LoggedAt, &m.Time, &m.Step); err != nil {
+		if err := rows.Scan(&m.Key, &m.XValue, &m.YValue, &m.LoggedAt); err != nil {
 			return nil, err
 		}
 		metrics = append(metrics, m)

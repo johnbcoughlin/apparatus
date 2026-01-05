@@ -36,10 +36,10 @@ mise run go-tests
 
 #### Playwright tests
 ```
-mise run playwright-tests
+PLAYWRIGHT_HTML_OPEN=never mise run playwright-tests
 ```
 
 #### All tests
 ```
-mise test
+PLAYWRIGHT_HTML_OPEN=never mise test
 ```

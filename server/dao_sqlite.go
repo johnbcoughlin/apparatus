@@ -2,7 +2,10 @@ package main
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
+	"strings"
+	"time"
 )
 
 // SQLiteDAO implements the DAO interface for SQLite
@@ -13,55 +16,6 @@ type SQLiteDAO struct {
 // NewSQLiteDAO creates a new SQLite DAO
 func NewSQLiteDAO(db *sql.DB) *SQLiteDAO {
 	return &SQLiteDAO{db: db}
-}
-
-// CreateTables creates all required tables for SQLite
-func (d *SQLiteDAO) CreateTables() error {
-	tables := []string{
-		`CREATE TABLE IF NOT EXISTS runs (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			uuid TEXT UNIQUE NOT NULL,
-			name TEXT NOT NULL,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-		)`,
-		`CREATE TABLE IF NOT EXISTS parameters (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			run_id INTEGER NOT NULL,
-			key TEXT NOT NULL,
-			value_type TEXT NOT NULL,
-			value_string TEXT,
-			value_bool INTEGER,
-			value_float REAL,
-			value_int INTEGER,
-			UNIQUE(run_id, key)
-		)`,
-		`CREATE TABLE IF NOT EXISTS metrics (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			run_id INTEGER NOT NULL,
-			key TEXT NOT NULL,
-			value REAL NOT NULL,
-			logged_at TIMESTAMP NOT NULL,
-			time REAL,
-			step INTEGER,
-			UNIQUE(run_id, key, time, step)
-		)`,
-		`CREATE TABLE IF NOT EXISTS artifacts (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			run_id INTEGER NOT NULL,
-			path TEXT NOT NULL,
-			uri TEXT NOT NULL,
-			type TEXT NOT NULL,
-			UNIQUE(run_id, path)
-		)`,
-	}
-
-	for _, sql := range tables {
-		if _, err := d.db.Exec(sql); err != nil {
-			return fmt.Errorf("failed to create table: %w", err)
-		}
-	}
-
-	return nil
 }
 
 // InsertRun inserts a new run
@@ -172,21 +126,36 @@ func (d *SQLiteDAO) GetParametersByRunID(runID int) ([]ParameterRow, error) {
 }
 
 // InsertMetric inserts a new metric
-func (d *SQLiteDAO) InsertMetric(runID int, key string, value float64, loggedAt int64, time *float64, step *int) error {
-	_, err := d.db.Exec(
-		"INSERT INTO metrics (run_id, key, value, logged_at, time, step) VALUES (?, ?, ?, ?, ?, ?)",
-		runID, key, value, loggedAt, time, step,
-	)
+func (d *SQLiteDAO) InsertMetrics(runID int, key string, xValues []float64, yValues []float64, loggedAtEpochMillis int64) error {
+	if len(xValues) != len(yValues) {
+		return errors.New("xValues and yValues must have the same length")
+	}
+	var stmtBuilder strings.Builder
+	stmtBuilder.WriteString("INSERT INTO metrics (run_id, key, x_value, y_value, logged_at) VALUES")
+	vals := []interface{}{}
+	for i := range len(xValues) {
+		stmtBuilder.WriteString("(?, ?, ?, ?, ?)")
+		if i < len(xValues)-1 {
+			stmtBuilder.WriteString(", ")
+		}
+		vals = append(vals, runID, key, xValues[i], yValues[i], time.UnixMilli(loggedAtEpochMillis).UTC())
+	}
+	stmtBuilder.WriteString(";")
+	stmt, err := d.db.Prepare(stmtBuilder.String())
+	if err != nil {
+		return err
+	}
+	_, err = stmt.Exec(vals...)
 	return err
 }
 
 // GetMetricsByRunID retrieves all metrics for a run
 func (d *SQLiteDAO) GetMetricsByRunID(runID int) ([]MetricRow, error) {
 	rows, err := d.db.Query(`
-		SELECT key, value, logged_at, time, step
+		SELECT key, x_value, y_value, logged_at
 		FROM metrics
 		WHERE run_id = ?
-		ORDER BY key, step, time
+		ORDER BY key, x_value
 	`, runID)
 	if err != nil {
 		return nil, err
@@ -196,7 +165,7 @@ func (d *SQLiteDAO) GetMetricsByRunID(runID int) ([]MetricRow, error) {
 	var metrics []MetricRow
 	for rows.Next() {
 		var m MetricRow
-		if err := rows.Scan(&m.Key, &m.Value, &m.LoggedAt, &m.Time, &m.Step); err != nil {
+		if err := rows.Scan(&m.Key, &m.XValue, &m.YValue, &m.LoggedAt); err != nil {
 			return nil, err
 		}
 		metrics = append(metrics, m)

@@ -40,7 +40,7 @@
 						<canvas id="chart-{{$idx}}" width="400" height="120"></canvas>
 					</td>
 					<td>
-						{{range $i, $v := $metric.Values}}{{if lt $i 3}}{{if $i}}, {{end}}{{$v.Value}}{{end}}{{end}}{{if gt (len $metric.Values) 3}}...{{end}}
+						{{range $i, $v := $metric.Values}}{{if lt $i 3}}{{if $i}}, {{end}}{{$v.YValue}}{{end}}{{end}}{{if gt (len $metric.Values) 3}}...{{end}}
 					</td>
 				</tr>
 			{{end}}
@@ -51,8 +51,8 @@
 <div id="metrics-chart-container" data-metrics='[
 	{{range $idx, $metric := .Metrics}}{{if $idx}},{{end}}
 	{
-		"labels": [{{range $i, $v := $metric.Values}}{{if $i}}, {{end}}{{if $v.Step}}{{$v.Step}}{{else}}{{$v.Time}}{{end}}{{end}}],
-		"values": [{{range $i, $v := $metric.Values}}{{if $i}}, {{end}}{{$v.Value}}{{end}}]
+		"values": [{{range $i, $v := $metric.Values}}{{if $i}}, {{end}}{{$v.XValue}}{{end}}]
+		"values": [{{range $i, $v := $metric.Values}}{{if $i}}, {{end}}{{$v.YValue}}{{end}}]
 	}
 	{{end}}
 ]' style="display: none;"></div>

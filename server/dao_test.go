@@ -6,22 +6,20 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/database/sqlite"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/lib/pq"
 	_ "github.com/mattn/go-sqlite3"
 )
 
 // testDAOImplementation runs a comprehensive test suite for a DAO implementation
 func testDAOImplementation(t *testing.T, dao DAO) {
-	// Test CreateTables
-	err := dao.CreateTables()
-	if err != nil {
-		t.Fatalf("CreateTables failed: %v", err)
-	}
-
 	// Test InsertRun and GetRunByUUID
 	runUUID := "test-run-uuid-123"
 	runName := "Test Run"
-	err = dao.InsertRun(runUUID, runName)
+	err := dao.InsertRun(runUUID, runName)
 	if err != nil {
 		t.Fatalf("InsertRun failed: %v", err)
 	}
@@ -100,18 +98,9 @@ func testDAOImplementation(t *testing.T, dao DAO) {
 	}
 
 	// Test InsertMetric
-	now := time.Now().UnixMilli()
-	err = dao.InsertMetric(runID, "loss", 0.5, now, floatPtr(1.0), intPtr(1))
-	if err != nil {
-		t.Fatalf("InsertMetric failed: %v", err)
-	}
-
-	err = dao.InsertMetric(runID, "loss", 0.3, now+1000, floatPtr(2.0), intPtr(2))
-	if err != nil {
-		t.Fatalf("InsertMetric failed: %v", err)
-	}
-
-	err = dao.InsertMetric(runID, "accuracy", 0.9, now, floatPtr(1.0), intPtr(1))
+	now := time.Now()
+	err = dao.InsertMetrics(runID, "loss", []float64{0, 10, 20, 30},
+		[]float64{0.5, 0.37, 0.34, 0.21}, now.UnixMilli())
 	if err != nil {
 		t.Fatalf("InsertMetric failed: %v", err)
 	}
@@ -121,8 +110,18 @@ func testDAOImplementation(t *testing.T, dao DAO) {
 	if err != nil {
 		t.Fatalf("GetMetricsByRunID failed: %v", err)
 	}
-	if len(metrics) != 3 {
-		t.Errorf("Expected 3 metrics, got %d", len(metrics))
+	if len(metrics) != 4 {
+		t.Errorf("Expected 4 metrics, got %d", len(metrics))
+	}
+	if metrics[2].XValue != 20.0 {
+		t.Errorf("XValue was incorrect")
+	}
+	if metrics[1].YValue != 0.37 {
+		t.Errorf("YValue was incorrect")
+	}
+	if metrics[1].LoggedAt.UnixMilli() != now.UnixMilli() {
+		t.Errorf("LoggedAt incorrect. Expected %v, was %v",
+			now.UnixMilli(), metrics[1].LoggedAt.UnixMilli())
 	}
 
 	// Test UpsertArtifact
@@ -183,13 +182,43 @@ func testDAOImplementation(t *testing.T, dao DAO) {
 }
 
 func TestSQLiteDAO(t *testing.T) {
-	// Create a temporary database file
+	// Create a temporary database file with absolute path
 	dbFile := "test_sqlite.db"
 	defer os.Remove(dbFile)
 
+	// Get absolute path
+	absPath, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get working directory: %v", err)
+	}
+	absDBPath := absPath + "/" + dbFile
+
+	// Create the database file first by opening it
 	db, err := sql.Open("sqlite3", dbFile)
 	if err != nil {
 		t.Fatalf("Failed to open SQLite database: %v", err)
+	}
+	// Ping to ensure the file is created
+	if err := db.Ping(); err != nil {
+		t.Fatalf("Failed to ping database: %v", err)
+	}
+	db.Close()
+
+	connString := "sqlite:///" + absDBPath
+
+	// Run migrations
+	m, err := migrate.New("file://migrations/sqlite3", connString)
+	if err != nil {
+		t.Fatalf("Failed to create migrator: %v", err)
+	}
+	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		t.Fatalf("Failed to run migrations: %v", err)
+	}
+
+	// Reopen database connection
+	db, err = sql.Open("sqlite3", dbFile)
+	if err != nil {
+		t.Fatalf("Failed to reopen SQLite database: %v", err)
 	}
 	defer db.Close()
 
@@ -210,17 +239,18 @@ func TestPostgresDAO(t *testing.T) {
 	}
 	defer db.Close()
 
-	// Clean up tables before test
-	cleanupSQL := []string{
-		"DROP TABLE IF EXISTS artifacts",
-		"DROP TABLE IF EXISTS metrics",
-		"DROP TABLE IF EXISTS parameters",
-		"DROP TABLE IF EXISTS runs",
+	// Drop and recreate the schema using migrations
+	m, err := migrate.New("file://migrations/postgres", connString)
+	if err != nil {
+		t.Fatalf("Failed to create migrator: %v", err)
 	}
-	for _, sql := range cleanupSQL {
-		if _, err := db.Exec(sql); err != nil {
-			t.Fatalf("Failed to clean up tables: %v", err)
-		}
+	// Drop all tables
+	if err := m.Down(); err != nil && err != migrate.ErrNoChange {
+		t.Logf("Warning during migration down: %v", err)
+	}
+	// Run migrations
+	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		t.Fatalf("Failed to run migrations: %v", err)
 	}
 
 	dao := NewPostgresDAO(db)

@@ -48,38 +48,35 @@ def log_param(run_uuid, key, value, tracking_uri="http://localhost:8080"):
     http_request_response_json(req, "log parameter")
 
 
-def log_metric(run_uuid, key, value, logged_at=None, time_value=None, step=None, tracking_uri="http://localhost:8080"):
+def log_metrics(run_uuid, key, x_values, y_values, logged_at_epoch_millis=None, tracking_uri="http://localhost:8080"):
     """Log a metric for a run.
 
     Args:
         run_uuid: The UUID of the run
         key: The metric name
-        value: The metric value (must be numeric)
-        logged_at: Timestamp in milliseconds since epoch (defaults to current time)
-        time_value: Optional time value (e.g., training time in seconds)
-        step: Optional step/iteration number
+        x_values: The x value of the metric (must be numeric)
+        y_values: The y value of the metric (must be numeric)
+        logged_at_epoch_millis: Timestamp in milliseconds since epoch (defaults to current time)
         tracking_uri: The tracking server URI
-
-    Note: If neither time_value nor step is provided, time will default to logged_at.
     """
-    if logged_at is None:
-        logged_at = int(time.time() * 1000)
+    if logged_at_epoch_millis is None:
+        logged_at_epoch_millis = int(time.time() * 1000)
 
-    # If neither time nor step is supplied, default time to logged_at
-    if time_value is None and step is None:
-        time_value = logged_at
+    if x_values is None:
+        x_values = [logged_at_epoch_millis for _ in y_values]
+
+    if len(x_values) != len(y_values):
+        raise ValueError("x_values and y_values must be the same length.")
 
     payload = {
         "run_uuid": run_uuid,
         "key": key,
-        "value": float(value),
-        "logged_at": logged_at,
+        "values": [{
+            "x_value": x_val,
+            "y_value": y_val,
+        } for x_val, y_val in zip(x_values, y_values, strict=True)],
+        "logged_at_epoch_millis": logged_at_epoch_millis,
     }
-
-    if time_value is not None:
-        payload["time"] = float(time_value)
-    if step is not None:
-        payload["step"] = int(step)
 
     url = f"{tracking_uri}/api/metrics"
     data = json.dumps(payload).encode('utf-8')

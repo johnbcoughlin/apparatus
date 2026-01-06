@@ -43,3 +43,28 @@ PLAYWRIGHT_HTML_OPEN=never mise run playwright-tests
 ```
 PLAYWRIGHT_HTML_OPEN=never mise test
 ```
+
+## Jujutsu Workflow: New Change First
+
+**Always run `jj new -m "description"` BEFORE making changes.**
+
+Create a new change when:
+- Starting any new task or modification
+- Switching between different tasks
+- Breaking out a small refactoring before the main work
+- Any time you'd consider making a commit
+
+Why: Squashing changes together (`jj squash`) is trivial. Splitting changes apart is harder and error-prone. Creating changes proactively is cheap and keeps work isolated.
+
+Pattern:
+```bash
+jj new -m "fix: update error handling"
+# now make your changes
+```
+
+Not:
+```bash
+# make changes first, then realize you need a new change
+```
+
+This keeps the working copy clean, makes abandoning work easy (`jj abandon`), and maintains clear change boundaries throughout development.

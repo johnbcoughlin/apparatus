@@ -39,6 +39,7 @@ func main() {
 	http.Handle("/api/params", LoggerMiddleware(http.HandlerFunc(handleAPILogParam)))
 	http.Handle("/api/metrics", LoggerMiddleware(http.HandlerFunc(handleAPILogMetrics)))
 	http.Handle("/api/artifacts", LoggerMiddleware(http.HandlerFunc(handleAPILogArtifact)))
+	http.Handle("/api/runs/notes", LoggerMiddleware(http.HandlerFunc(handleAPIUpdateRunNotes)))
 	http.Handle("/runs/", LoggerMiddleware(http.HandlerFunc(handleViewRun)))
 	http.Handle("/artifacts", LoggerMiddleware(http.HandlerFunc(handleViewArtifact)))
 	http.Handle("/artifacts/blob", LoggerMiddleware(http.HandlerFunc(handleServeArtifactBlob)))
@@ -61,6 +62,7 @@ func main() {
 type Run struct {
 	UUID      string
 	Name      string
+	Notes     string
 	CreatedAt string
 }
 
@@ -335,6 +337,39 @@ func handleAPILogArtifact(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func handleAPIUpdateRunNotes(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	runUUID := r.FormValue("run_uuid")
+	notes := r.FormValue("notes")
+
+	if runUUID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Missing required field: run_uuid"})
+		return
+	}
+
+	runID, err := dao.GetRunIDByUUID(runUUID)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Run not found"})
+		return
+	}
+
+	err = dao.UpdateRunNotes(runID, notes)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to update notes"})
+		return
+	}
+
+	// Redirect back to the run overview page
+	http.Redirect(w, r, fmt.Sprintf("/runs/%s/overview", runUUID), http.StatusSeeOther)
+}
+
 type Parameter struct {
 	Key   string
 	Value string
@@ -501,12 +536,14 @@ func handleRunOverview(w http.ResponseWriter, r *http.Request, runUUID string) {
 		Title      string
 		UUID       string
 		Name       string
+		Notes      string
 		Parameters []Parameter
 		Metrics    []Metric
 	}{
 		Title:      name,
 		UUID:       runUUID,
 		Name:       name,
+		Notes:      run.Notes,
 		Parameters: parameters,
 		Metrics:    metrics,
 	}

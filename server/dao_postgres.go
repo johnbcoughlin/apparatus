@@ -30,15 +30,15 @@ func (d *PostgresDAO) InsertRun(uuid, name string) error {
 
 // GetRunByUUID retrieves a run by its UUID
 func (d *PostgresDAO) GetRunByUUID(uuid string) (*Run, error) {
-	var name string
+	var name, notes string
 	err := d.db.QueryRow(
-		"SELECT name FROM runs WHERE uuid = $1",
+		"SELECT name, notes FROM runs WHERE uuid = $1",
 		uuid,
-	).Scan(&name)
+	).Scan(&name, &notes)
 	if err != nil {
 		return nil, err
 	}
-	return &Run{UUID: uuid, Name: name}, nil
+	return &Run{UUID: uuid, Name: name, Notes: notes}, nil
 }
 
 // GetRunIDByUUID retrieves the database ID of a run by its UUID
@@ -245,4 +245,13 @@ func (d *PostgresDAO) GetArtifactByRunIDAndPath(runID int, path string) (*Artifa
 		return nil, err
 	}
 	return &a, nil
+}
+
+// UpdateRunNotes updates the notes for a run
+func (d *PostgresDAO) UpdateRunNotes(runID int, notes string) error {
+	_, err := d.db.Exec(
+		"UPDATE runs SET notes = $1 WHERE id = $2",
+		notes, runID,
+	)
+	return err
 }

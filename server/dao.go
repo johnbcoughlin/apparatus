@@ -12,6 +12,7 @@ type DAO interface {
 	GetRunByUUID(uuid string) (*Run, error)
 	GetRunIDByUUID(uuid string) (int, error)
 	GetAllRuns() ([]Run, error)
+	UpdateRunNotes(runID int, notes string) error
 
 	// Parameter operations
 	UpsertParameter(runID int, key, valueType string, valueString *string, valueBool *bool, valueFloat *float64, valueInt *int64) error
@@ -32,6 +33,7 @@ type RunRow struct {
 	ID        int
 	UUID      string
 	Name      string
+	Notes     string
 	CreatedAt time.Time
 }
 

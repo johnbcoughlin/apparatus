@@ -51,7 +51,7 @@
 <div id="metrics-chart-container" data-metrics='[
 	{{range $idx, $metric := .Metrics}}{{if $idx}},{{end}}
 	{
-		"values": [{{range $i, $v := $metric.Values}}{{if $i}}, {{end}}{{$v.XValue}}{{end}}]
+		"labels": [{{range $i, $v := $metric.Values}}{{if $i}}, {{end}}{{$v.XValue}}{{end}}],
 		"values": [{{range $i, $v := $metric.Values}}{{if $i}}, {{end}}{{$v.YValue}}{{end}}]
 	}
 	{{end}}

@@ -39,7 +39,6 @@ func main() {
 	http.Handle("/api/params", LoggerMiddleware(http.HandlerFunc(handleAPILogParam)))
 	http.Handle("/api/metrics", LoggerMiddleware(http.HandlerFunc(handleAPILogMetrics)))
 	http.Handle("/api/artifacts", LoggerMiddleware(http.HandlerFunc(handleAPILogArtifact)))
-	http.Handle("/api/runs/notes", LoggerMiddleware(http.HandlerFunc(handleAPIUpdateRunNotes)))
 	http.Handle("/runs/", LoggerMiddleware(http.HandlerFunc(handleViewRun)))
 	http.Handle("/artifacts", LoggerMiddleware(http.HandlerFunc(handleViewArtifact)))
 	http.Handle("/artifacts/blob", LoggerMiddleware(http.HandlerFunc(handleServeArtifactBlob)))
@@ -337,20 +336,13 @@ func handleAPILogArtifact(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func handleAPIUpdateRunNotes(w http.ResponseWriter, r *http.Request) {
+func handleUpdateRunNotes(w http.ResponseWriter, r *http.Request, runUUID string) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
 
-	runUUID := r.FormValue("run_uuid")
 	notes := r.FormValue("notes")
-
-	if runUUID == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Missing required field: run_uuid"})
-		return
-	}
 
 	runID, err := dao.GetRunIDByUUID(runUUID)
 	if err != nil {
@@ -366,8 +358,23 @@ func handleAPIUpdateRunNotes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Redirect back to the run overview page
-	http.Redirect(w, r, fmt.Sprintf("/runs/%s/overview", runUUID), http.StatusSeeOther)
+	// Return the notes form fragment for htmx to swap in
+	data := struct {
+		UUID  string
+		Notes string
+	}{
+		UUID:  runUUID,
+		Notes: notes,
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	tmpl, err := template.ParseFS(templateFS, "templates/run_notes_form.html")
+	if err != nil {
+		log.Printf("Failed to parse template: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	tmpl.ExecuteTemplate(w, "notes_form", data)
 }
 
 type Parameter struct {
@@ -408,6 +415,9 @@ func handleViewRun(w http.ResponseWriter, r *http.Request) {
 		case "artifacts":
 			executeRunPageTabsTemplate(w, r, runUUID, "artifacts")
 			handleRunArtifacts(w, r, runUUID)
+			return
+		case "notes":
+			handleUpdateRunNotes(w, r, runUUID)
 			return
 		}
 	}
@@ -549,7 +559,7 @@ func handleRunOverview(w http.ResponseWriter, r *http.Request, runUUID string) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	tmpl, err := template.ParseFS(templateFS, "templates/run_overview.html")
+	tmpl, err := template.ParseFS(templateFS, "templates/run_overview.html", "templates/run_notes_form.html")
 	if err != nil {
 		log.Fatalf("Failed to parse template: %v", err)
 	}

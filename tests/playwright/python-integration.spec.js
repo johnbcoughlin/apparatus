@@ -81,4 +81,42 @@ test.describe('Apparatus End-to-End Tests', () => {
     // This tests that the selected artifact persists across tab navigation
     await expect(page.locator('#artifact-display')).toContainText('results/training_log.txt');
   });
+
+  test('notes persist after page reload', async ({ page, apparatusAPI }) => {
+    // Step 1: Create a run
+    const timestamp = Date.now();
+    const runName = `notes-test-run-${timestamp}`;
+    const runId = await apparatusAPI.createRun(runName);
+
+    // Step 2: Navigate to the run page
+    await page.goto(`/runs/${runId}`);
+    await page.waitForLoadState('networkidle');
+
+    // Step 3: Wait for the overview tab content to load
+    await page.waitForSelector('#notes-form', { timeout: 10000 });
+
+    // Step 4: Enter a note in the textarea
+    const testNote = `Test note created at ${timestamp}`;
+    const textarea = page.locator('#notes-form textarea');
+    await textarea.fill(testNote);
+
+    // Step 5: Click the Save button
+    await page.locator('#notes-form button[type="submit"]').click();
+
+    // Step 6: Wait for htmx to swap in the updated form
+    await page.waitForLoadState('networkidle');
+
+    // Step 7: Verify the note is still in the textarea after save
+    await expect(textarea).toHaveValue(testNote);
+
+    // Step 8: Reload the page
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+
+    // Step 9: Wait for the overview tab content to load again
+    await page.waitForSelector('#notes-form', { timeout: 10000 });
+
+    // Step 10: Verify the note persisted after reload
+    await expect(page.locator('#notes-form textarea')).toHaveValue(testNote);
+  });
 });

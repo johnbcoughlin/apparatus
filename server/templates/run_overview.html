@@ -1,3 +1,13 @@
+<div style="margin-bottom: 2rem;">
+	<h2>Notes</h2>
+	<form action="/api/runs/notes" method="POST">
+		<input type="hidden" name="run_uuid" value="{{.UUID}}">
+		<textarea name="notes" rows="4" style="width: 100%; max-width: 600px; font-family: inherit; padding: 8px;">{{.Notes}}</textarea>
+		<br>
+		<button type="submit" style="margin-top: 8px; padding: 6px 16px;">Save</button>
+	</form>
+</div>
+
 <div style="display: flex; gap: 2rem; align-items: flex-start; max-width: 100%;">
 	<div style="flex: 0 0 40%; min-width: 0;">
 		{{if .Parameters}}

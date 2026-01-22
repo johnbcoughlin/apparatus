@@ -29,15 +29,15 @@ func (d *SQLiteDAO) InsertRun(uuid, name string) error {
 
 // GetRunByUUID retrieves a run by its UUID
 func (d *SQLiteDAO) GetRunByUUID(uuid string) (*Run, error) {
-	var name string
+	var name, notes string
 	err := d.db.QueryRow(
-		"SELECT name FROM runs WHERE uuid = ?",
+		"SELECT name, notes FROM runs WHERE uuid = ?",
 		uuid,
-	).Scan(&name)
+	).Scan(&name, &notes)
 	if err != nil {
 		return nil, err
 	}
-	return &Run{UUID: uuid, Name: name}, nil
+	return &Run{UUID: uuid, Name: name, Notes: notes}, nil
 }
 
 // GetRunIDByUUID retrieves the database ID of a run by its UUID
@@ -219,4 +219,13 @@ func (d *SQLiteDAO) GetArtifactByRunIDAndPath(runID int, path string) (*Artifact
 		return nil, err
 	}
 	return &a, nil
+}
+
+// UpdateRunNotes updates the notes for a run
+func (d *SQLiteDAO) UpdateRunNotes(runID int, notes string) error {
+	_, err := d.db.Exec(
+		"UPDATE runs SET notes = ? WHERE id = ?",
+		notes, runID,
+	)
+	return err
 }

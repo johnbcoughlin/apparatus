@@ -17,6 +17,7 @@ type DAO interface {
 	// Run operations
 	InsertRun(uuid, name string, experimentID int, parentRunID *int) error
 	GetRunByUUID(uuid string) (*Run, error)
+	GetRunByID(id int) (*Run, error)
 	GetRunIDByUUID(uuid string) (int, error)
 	GetAllRuns() ([]Run, error)
 	GetRunsByExperimentID(experimentID int) ([]Run, error)

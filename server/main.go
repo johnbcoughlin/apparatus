@@ -668,14 +668,41 @@ func handleViewRun(w http.ResponseWriter, r *http.Request) {
 	}
 	name := run.Name
 
+	// Get parent run info if exists
+	var parentRun *Run
+	var grandparentRun *Run
+	if run.ParentRunID != nil {
+		var err error
+		parentRun, err = dao.GetRunByID(*run.ParentRunID)
+		if err != nil {
+			log.Printf("Failed to get parent run (id=%d) for run %s: %v", *run.ParentRunID, runUUID, err)
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w, "Internal server error")
+			return
+		}
+		if parentRun != nil && parentRun.ParentRunID != nil {
+			grandparentRun, err = dao.GetRunByID(*parentRun.ParentRunID)
+			if err != nil {
+				log.Printf("Failed to get grandparent run (id=%d) for run %s: %v", *parentRun.ParentRunID, runUUID, err)
+				w.WriteHeader(http.StatusInternalServerError)
+				fmt.Fprintf(w, "Internal server error")
+				return
+			}
+		}
+	}
+
 	data := struct {
-		Title string
-		UUID  string
-		Name  string
+		Title          string
+		UUID           string
+		Name           string
+		ParentRun      *Run
+		GrandparentRun *Run
 	}{
-		Title: name,
-		UUID:  runUUID,
-		Name:  name,
+		Title:          name,
+		UUID:           runUUID,
+		Name:           name,
+		ParentRun:      parentRun,
+		GrandparentRun: grandparentRun,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

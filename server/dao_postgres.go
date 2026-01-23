@@ -140,6 +140,26 @@ func (d *PostgresDAO) GetRunByUUID(uuid string) (*Run, error) {
 	return run, nil
 }
 
+// GetRunByID retrieves a run by its database ID
+func (d *PostgresDAO) GetRunByID(id int) (*Run, error) {
+	var uuid, name, notes string
+	var parentRunID sql.NullInt64
+	var nestingLevel int
+	err := d.db.QueryRow(
+		"SELECT uuid, name, notes, parent_run_id, nesting_level FROM runs WHERE id = $1",
+		id,
+	).Scan(&uuid, &name, &notes, &parentRunID, &nestingLevel)
+	if err != nil {
+		return nil, err
+	}
+	run := &Run{UUID: uuid, Name: name, Notes: notes, NestingLevel: nestingLevel}
+	if parentRunID.Valid {
+		pID := int(parentRunID.Int64)
+		run.ParentRunID = &pID
+	}
+	return run, nil
+}
+
 // GetRunIDByUUID retrieves the database ID of a run by its UUID
 func (d *PostgresDAO) GetRunIDByUUID(uuid string) (int, error) {
 	var id int

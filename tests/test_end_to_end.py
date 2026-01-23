@@ -116,3 +116,72 @@ def test_artifact_upload(running_server):
         # Clean up temp file
         Path(test_file_path).unlink()
 
+
+def test_nested_runs(running_server):
+    """Test creating and viewing nested runs (parent -> child -> grandchild)."""
+    # Create parent run (level 0)
+    parent_id = apparatus.create_run("parent run")
+
+    # Create child run (level 1) with parent
+    child_id = apparatus.create_run("child run", parent_run_uuid=parent_id)
+
+    # Create grandchild run (level 2) with child as parent
+    grandchild_id = apparatus.create_run("grandchild run", parent_run_uuid=child_id)
+
+    # Verify parent page doesn't show breadcrumbs
+    with urllib.request.urlopen(f"http://localhost:8080/runs/{parent_id}", timeout=5) as response:
+        content = response.read().decode('utf-8')
+        assert "parent run" in content
+        # No breadcrumb navigation for top-level runs
+        assert ">" not in content or "child run" not in content
+
+    # Verify child page shows parent in breadcrumbs
+    with urllib.request.urlopen(f"http://localhost:8080/runs/{child_id}", timeout=5) as response:
+        content = response.read().decode('utf-8')
+        assert "child run" in content
+        assert "parent run" in content  # Parent should be in breadcrumb
+
+    # Verify grandchild page shows parent and grandparent in breadcrumbs
+    with urllib.request.urlopen(f"http://localhost:8080/runs/{grandchild_id}", timeout=5) as response:
+        content = response.read().decode('utf-8')
+        assert "grandchild run" in content
+        assert "child run" in content  # Parent in breadcrumb
+        assert "parent run" in content  # Grandparent in breadcrumb
+
+
+def test_nested_runs_max_depth(running_server):
+    """Test that nested runs cannot exceed maximum depth (2 levels)."""
+    # Create 3 levels
+    l0_id = apparatus.create_run("level 0")
+    l1_id = apparatus.create_run("level 1", parent_run_uuid=l0_id)
+    l2_id = apparatus.create_run("level 2", parent_run_uuid=l1_id)
+
+    # Attempting to create level 3 should fail
+    try:
+        apparatus.create_run("level 3", parent_run_uuid=l2_id)
+        assert False, "Should have raised an error for exceeding max nesting"
+    except RuntimeError as e:
+        assert "maximum nesting level" in str(e).lower() or "400" in str(e)
+
+
+def test_nested_runs_experiment_page(running_server):
+    """Test that experiment page shows nested runs with collapsible details."""
+    # Create a fresh experiment for this test
+    import urllib.parse
+
+    # Create parent and child under default experiment
+    parent_id = apparatus.create_run("nested parent")
+    child_id = apparatus.create_run("nested child", parent_run_uuid=parent_id)
+
+    # Check experiment page shows parent with child count
+    with urllib.request.urlopen(f"http://localhost:8080/experiments/00000000-0000-0000-0000-000000000000", timeout=5) as response:
+        content = response.read().decode('utf-8')
+        assert "nested parent" in content
+        assert "1 children" in content or "children)" in content
+
+    # Check opening the parent run shows children
+    with urllib.request.urlopen(f"http://localhost:8080/experiments/00000000-0000-0000-0000-000000000000?open_l0={parent_id}", timeout=5) as response:
+        content = response.read().decode('utf-8')
+        assert "nested parent" in content
+        assert "nested child" in content
+

@@ -275,6 +275,95 @@ func testDAOImplementation(t *testing.T, dao DAO) {
 	if !found {
 		t.Error("learning_rate parameter not found after update")
 	}
+
+	// Test nested runs
+	// Create parent run (level 0)
+	parentUUID := "parent-run-uuid"
+	err = dao.InsertRun(parentUUID, "Parent Run", defaultExpID, nil)
+	if err != nil {
+		t.Fatalf("InsertRun for parent failed: %v", err)
+	}
+	parentID, _ := dao.GetRunIDByUUID(parentUUID)
+
+	// Create child run (level 1)
+	childUUID := "child-run-uuid"
+	err = dao.InsertRun(childUUID, "Child Run", defaultExpID, &parentID)
+	if err != nil {
+		t.Fatalf("InsertRun for child failed: %v", err)
+	}
+	childID, _ := dao.GetRunIDByUUID(childUUID)
+
+	// Verify child's nesting level
+	childRun, _ := dao.GetRunByUUID(childUUID)
+	if childRun.NestingLevel != 1 {
+		t.Errorf("Expected child nesting level 1, got %d", childRun.NestingLevel)
+	}
+	if childRun.ParentRunID == nil || *childRun.ParentRunID != parentID {
+		t.Error("Child parent_run_id not set correctly")
+	}
+
+	// Create grandchild run (level 2)
+	grandchildUUID := "grandchild-run-uuid"
+	err = dao.InsertRun(grandchildUUID, "Grandchild Run", defaultExpID, &childID)
+	if err != nil {
+		t.Fatalf("InsertRun for grandchild failed: %v", err)
+	}
+	grandchildID, _ := dao.GetRunIDByUUID(grandchildUUID)
+
+	grandchildRun, _ := dao.GetRunByUUID(grandchildUUID)
+	if grandchildRun.NestingLevel != 2 {
+		t.Errorf("Expected grandchild nesting level 2, got %d", grandchildRun.NestingLevel)
+	}
+
+	// Test GetChildRuns
+	childRuns, err := dao.GetChildRuns(parentID)
+	if err != nil {
+		t.Fatalf("GetChildRuns failed: %v", err)
+	}
+	if len(childRuns) != 1 || childRuns[0].UUID != childUUID {
+		t.Errorf("GetChildRuns returned unexpected runs: %+v", childRuns)
+	}
+
+	// Test GetChildRunCount
+	childCount, err := dao.GetChildRunCount(parentID)
+	if err != nil {
+		t.Fatalf("GetChildRunCount failed: %v", err)
+	}
+	if childCount != 1 {
+		t.Errorf("Expected 1 child, got %d", childCount)
+	}
+
+	// Test GetRunsByExperimentIDAndLevel
+	level0Runs, err := dao.GetRunsByExperimentIDAndLevel(defaultExpID, 0)
+	if err != nil {
+		t.Fatalf("GetRunsByExperimentIDAndLevel failed: %v", err)
+	}
+	foundParent := false
+	for _, r := range level0Runs {
+		if r.UUID == parentUUID {
+			foundParent = true
+			break
+		}
+	}
+	if !foundParent {
+		t.Error("Parent run not found in level 0 runs")
+	}
+
+	// Test GetRunByID
+	parentByID, err := dao.GetRunByID(parentID)
+	if err != nil {
+		t.Fatalf("GetRunByID failed: %v", err)
+	}
+	if parentByID.UUID != parentUUID || parentByID.Name != "Parent Run" {
+		t.Errorf("GetRunByID returned wrong data: %+v", parentByID)
+	}
+
+	// Test max nesting level (should fail for level 3)
+	greatGrandchildUUID := "great-grandchild-run-uuid"
+	err = dao.InsertRun(greatGrandchildUUID, "Great Grandchild Run", defaultExpID, &grandchildID)
+	if err == nil {
+		t.Error("Expected error when exceeding max nesting level, but got none")
+	}
 }
 
 func TestSQLiteDAO(t *testing.T) {

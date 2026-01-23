@@ -1,21 +1,99 @@
 {{template "header.html" .}}
 	<h1>{{.Experiment.Name}}</h1>
 
-	{{if .Runs}}
+	{{if .NestedRuns}}
 	<h2>Runs</h2>
-	<table border="1" cellpadding="5" cellspacing="0">
+	<table border="1" cellpadding="5" cellspacing="0" style="width: 100%;">
 		<thead>
 			<tr>
 				<th>Name</th>
 				<th>Created At</th>
+				<th>Children</th>
 			</tr>
 		</thead>
 		<tbody>
-		{{range .Runs}}
-			<tr>
-				<td><a href="/runs/{{.UUID}}">{{.Name}}</a></td>
-				<td>{{.CreatedAt}}</td>
-			</tr>
+		{{range .NestedRuns}}
+		{{if gt .ChildCount 0}}
+		<tr>
+			<td colspan="3" style="padding: 0;">
+				<details {{if eq .UUID $.OpenL0}}open{{end}}>
+					<summary hx-get="/experiments/{{$.ExperimentUUID}}?open_l0={{if eq .UUID $.OpenL0}}{{else}}{{.UUID}}{{end}}"
+							 hx-target="body"
+							 hx-push-url="true"
+							 hx-swap="innerHTML"
+							 style="cursor: pointer; padding: 8px; display: flex; gap: 1rem;">
+						<!-- stopPropagation prevents link click from also triggering the htmx toggle -->
+						<span style="flex: 2;"><a href="/runs/{{.UUID}}" onclick="event.stopPropagation();">{{.Name}}</a></span>
+						<span style="flex: 1; color: #666;">{{.CreatedAt}}</span>
+						<span style="flex: 1; color: #888;">({{.ChildCount}} children)</span>
+					</summary>
+					<div style="padding-left: 20px;">
+						<table border="1" cellpadding="5" cellspacing="0" style="width: 100%; margin: 8px 0;">
+							<thead>
+								<tr>
+									<th>Name</th>
+									<th>Created At</th>
+									<th>Children</th>
+								</tr>
+							</thead>
+							<tbody>
+							{{range .Children}}
+							{{if gt .ChildCount 0}}
+							<tr>
+								<td colspan="3" style="padding: 0;">
+									<details {{if eq .UUID $.OpenL1}}open{{end}}>
+										<summary hx-get="/experiments/{{$.ExperimentUUID}}?open_l0={{$.OpenL0}}&open_l1={{if eq .UUID $.OpenL1}}{{else}}{{.UUID}}{{end}}"
+												 hx-target="body"
+												 hx-push-url="true"
+												 hx-swap="innerHTML"
+												 style="cursor: pointer; padding: 8px; display: flex; gap: 1rem;">
+											<!-- stopPropagation prevents link click from also triggering the htmx toggle -->
+											<span style="flex: 2;"><a href="/runs/{{.UUID}}" onclick="event.stopPropagation();">{{.Name}}</a></span>
+											<span style="flex: 1; color: #666;">{{.CreatedAt}}</span>
+											<span style="flex: 1; color: #888;">({{.ChildCount}} children)</span>
+										</summary>
+										<div style="padding-left: 20px;">
+											<table border="1" cellpadding="5" cellspacing="0" style="width: 100%; margin: 8px 0;">
+												<thead>
+													<tr>
+														<th>Name</th>
+														<th>Created At</th>
+													</tr>
+												</thead>
+												<tbody>
+												{{range .Children}}
+												<tr>
+													<td><a href="/runs/{{.UUID}}">{{.Name}}</a></td>
+													<td>{{.CreatedAt}}</td>
+												</tr>
+												{{end}}
+												</tbody>
+											</table>
+										</div>
+									</details>
+								</td>
+							</tr>
+							{{else}}
+							<tr>
+								<td><a href="/runs/{{.UUID}}">{{.Name}}</a></td>
+								<td>{{.CreatedAt}}</td>
+								<td>-</td>
+							</tr>
+							{{end}}
+							{{end}}
+							</tbody>
+						</table>
+					</div>
+				</details>
+			</td>
+		</tr>
+		{{else}}
+		<tr>
+			<td><a href="/runs/{{.UUID}}">{{.Name}}</a></td>
+			<td>{{.CreatedAt}}</td>
+			<td>-</td>
+		</tr>
+		{{end}}
 		{{end}}
 		</tbody>
 	</table>

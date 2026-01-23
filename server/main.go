@@ -71,6 +71,14 @@ type Run struct {
 	NestingLevel int
 }
 
+// NestedRun represents a run with its children for hierarchical display
+type NestedRun struct {
+	Run
+	ID         int
+	ChildCount int
+	Children   []NestedRun
+}
+
 type Experiment struct {
 	UUID            string
 	Name            string
@@ -480,21 +488,77 @@ func handleViewExperiment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	runs, err := dao.GetRunsByExperimentID(experimentID)
+	// Get URL query params for open state
+	openL0 := r.URL.Query().Get("open_l0")
+	openL1 := r.URL.Query().Get("open_l1")
+
+	// Get level 0 runs
+	level0Runs, err := dao.GetRunsByExperimentIDAndLevel(experimentID, 0)
 	if err != nil {
-		log.Printf("Failed to get runs: %v", err)
+		log.Printf("Failed to get level 0 runs: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
+	// Build nested run structure
+	// TODO(a-1ebf): Fix N+1 queries - runID and childCount should come from DAO
+	var nestedRuns []NestedRun
+	for _, run := range level0Runs {
+		runID, _ := dao.GetRunIDByUUID(run.UUID)
+		childCount, _ := dao.GetChildRunCount(runID)
+
+		nestedRun := NestedRun{
+			Run:        run,
+			ID:         runID,
+			ChildCount: childCount,
+		}
+
+		// If this run is open, load its children
+		if run.UUID == openL0 && childCount > 0 {
+			childRuns, _ := dao.GetChildRuns(runID)
+			for _, childRun := range childRuns {
+				childRunID, _ := dao.GetRunIDByUUID(childRun.UUID)
+				grandchildCount, _ := dao.GetChildRunCount(childRunID)
+
+				childNestedRun := NestedRun{
+					Run:        childRun,
+					ID:         childRunID,
+					ChildCount: grandchildCount,
+				}
+
+				// If this child is open, load its grandchildren
+				if childRun.UUID == openL1 && grandchildCount > 0 {
+					grandchildRuns, _ := dao.GetChildRuns(childRunID)
+					for _, grandchildRun := range grandchildRuns {
+						grandchildRunID, _ := dao.GetRunIDByUUID(grandchildRun.UUID)
+						childNestedRun.Children = append(childNestedRun.Children, NestedRun{
+							Run: grandchildRun,
+							ID:  grandchildRunID,
+						})
+					}
+				}
+
+				nestedRun.Children = append(nestedRun.Children, childNestedRun)
+			}
+		}
+
+		nestedRuns = append(nestedRuns, nestedRun)
+	}
+
 	data := struct {
-		Title       string
-		Experiment  *Experiment
-		Runs        []Run
+		Title          string
+		Experiment     *Experiment
+		NestedRuns     []NestedRun
+		OpenL0         string
+		OpenL1         string
+		ExperimentUUID string
 	}{
-		Title:       experiment.Name,
-		Experiment:  experiment,
-		Runs:        runs,
+		Title:          experiment.Name,
+		Experiment:     experiment,
+		NestedRuns:     nestedRuns,
+		OpenL0:         openL0,
+		OpenL1:         openL1,
+		ExperimentUUID: experimentUUID,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

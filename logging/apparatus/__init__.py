@@ -16,9 +16,22 @@ def http_request_response_json(req, action):
         raise RuntimeError(f"Failed to {action}: {e.reason}")
 
 
-def create_run(name, tracking_uri="http://localhost:8080"):
-    """Create a new run and return its UUID."""
-    url = f"{tracking_uri}/api/runs?name={urllib.parse.quote(name)}"
+def create_run(name, experiment_uuid=None, parent_run_uuid=None, tracking_uri="http://localhost:8080"):
+    """Create a new run and return its UUID.
+
+    Args:
+        name: The name of the run
+        experiment_uuid: Optional UUID of the experiment to associate this run with
+        parent_run_uuid: Optional UUID of the parent run (for nested runs, max 2 levels)
+        tracking_uri: The tracking server URI
+    """
+    params = {"name": name}
+    if experiment_uuid:
+        params["experiment_uuid"] = experiment_uuid
+    if parent_run_uuid:
+        params["parent_run_uuid"] = parent_run_uuid
+
+    url = f"{tracking_uri}/api/runs?{urllib.parse.urlencode(params)}"
 
     req = urllib.request.Request(url, method="POST")
     return http_request_response_json(req, "create run")["id"]

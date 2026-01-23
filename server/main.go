@@ -39,6 +39,7 @@ func main() {
 	http.Handle("/api/params", LoggerMiddleware(http.HandlerFunc(handleAPILogParam)))
 	http.Handle("/api/metrics", LoggerMiddleware(http.HandlerFunc(handleAPILogMetrics)))
 	http.Handle("/api/artifacts", LoggerMiddleware(http.HandlerFunc(handleAPILogArtifact)))
+	http.Handle("/api/runs/notes", LoggerMiddleware(http.HandlerFunc(handleAPIUpdateRunNotes)))
 	http.Handle("/runs/", LoggerMiddleware(http.HandlerFunc(handleViewRun)))
 	http.Handle("/artifacts", LoggerMiddleware(http.HandlerFunc(handleViewArtifact)))
 	http.Handle("/artifacts/blob", LoggerMiddleware(http.HandlerFunc(handleServeArtifactBlob)))
@@ -334,6 +335,47 @@ func handleAPILogArtifact(w http.ResponseWriter, r *http.Request) {
 		"path":   artifactPath,
 		"uri":    uri,
 	})
+}
+
+func handleAPIUpdateRunNotes(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		RunUUID string `json:"run_uuid"`
+		Notes   string `json:"notes"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid JSON"})
+		return
+	}
+
+	if req.RunUUID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Missing required field: run_uuid"})
+		return
+	}
+
+	runID, err := dao.GetRunIDByUUID(req.RunUUID)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Run not found"})
+		return
+	}
+
+	err = dao.UpdateRunNotes(runID, req.Notes)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to update notes"})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
 func handleUpdateRunNotes(w http.ResponseWriter, r *http.Request, runUUID string) {

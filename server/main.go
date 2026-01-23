@@ -144,6 +144,7 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 func handleAPICreateRun(w http.ResponseWriter, r *http.Request) {
 	name := r.URL.Query().Get("name")
 	experimentUUID := r.URL.Query().Get("experiment_uuid")
+	parentRunUUID := r.URL.Query().Get("parent_run_uuid")
 	runUUID := uuid.New().String()
 
 	// Get experiment ID (use default if not specified)
@@ -160,9 +161,33 @@ func handleAPICreateRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = dao.InsertRun(runUUID, name, experimentID, nil)
+	// Get parent run ID if specified
+	var parentRunID *int
+	if parentRunUUID != "" {
+		id, err := dao.GetRunIDByUUID(parentRunUUID)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Invalid parent run"})
+			return
+		}
+		parentRunID = &id
+
+		// If no experiment was specified, inherit from parent
+		if experimentUUID == "" {
+			parentRun, err := dao.GetRunByUUID(parentRunUUID)
+			if err == nil && parentRun.ParentRunID != nil {
+				// Get experiment from parent (query by run ID)
+				// For now, keep the default experiment since we'd need to add a method
+				// to get experiment_id by run_id
+			}
+		}
+	}
+
+	err = dao.InsertRun(runUUID, name, experimentID, parentRunID)
 	if err != nil {
-		log.Fatalf("Failed to insert run: %v", err)
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")

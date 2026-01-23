@@ -7,11 +7,19 @@ import (
 
 // DAO defines the interface for database operations
 type DAO interface {
+	// Experiment operations
+	InsertExperiment(uuid, name string) error
+	GetExperimentByUUID(uuid string) (*Experiment, error)
+	GetExperimentIDByUUID(uuid string) (int, error)
+	GetAllExperiments() ([]Experiment, error)
+	GetDefaultExperimentID() (int, error)
+
 	// Run operations
-	InsertRun(uuid, name string) error
+	InsertRun(uuid, name string, experimentID int) error
 	GetRunByUUID(uuid string) (*Run, error)
 	GetRunIDByUUID(uuid string) (int, error)
 	GetAllRuns() ([]Run, error)
+	GetRunsByExperimentID(experimentID int) ([]Run, error)
 	UpdateRunNotes(runID int, notes string) error
 
 	// Parameter operations
@@ -60,4 +68,12 @@ type ArtifactRow struct {
 	Path string
 	URI  string
 	Type string
+}
+
+// ExperimentRow represents a row in the experiments table
+type ExperimentRow struct {
+	ID        int
+	UUID      string
+	Name      string
+	CreatedAt time.Time
 }

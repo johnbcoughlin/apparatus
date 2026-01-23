@@ -16,10 +16,106 @@ import (
 
 // testDAOImplementation runs a comprehensive test suite for a DAO implementation
 func testDAOImplementation(t *testing.T, dao DAO) {
+	// Get default experiment ID for run creation
+	defaultExpID, err := dao.GetDefaultExperimentID()
+	if err != nil {
+		t.Fatalf("GetDefaultExperimentID failed: %v", err)
+	}
+
+	// Test InsertExperiment and GetExperimentByUUID
+	expUUID := "test-exp-uuid-123"
+	expName := "Test Experiment"
+	err = dao.InsertExperiment(expUUID, expName)
+	if err != nil {
+		t.Fatalf("InsertExperiment failed: %v", err)
+	}
+
+	exp, err := dao.GetExperimentByUUID(expUUID)
+	if err != nil {
+		t.Fatalf("GetExperimentByUUID failed: %v", err)
+	}
+	if exp.UUID != expUUID || exp.Name != expName {
+		t.Errorf("GetExperimentByUUID returned incorrect data: got %+v", exp)
+	}
+
+	// Test GetExperimentIDByUUID
+	expID, err := dao.GetExperimentIDByUUID(expUUID)
+	if err != nil {
+		t.Fatalf("GetExperimentIDByUUID failed: %v", err)
+	}
+	if expID <= 0 {
+		t.Errorf("GetExperimentIDByUUID returned invalid ID: %d", expID)
+	}
+
+	// Test GetAllExperiments includes our new experiment
+	experiments, err := dao.GetAllExperiments()
+	if err != nil {
+		t.Fatalf("GetAllExperiments failed: %v", err)
+	}
+	if len(experiments) < 2 {
+		t.Errorf("Expected at least 2 experiments (default + test), got %d", len(experiments))
+	}
+
+	// Test run under non-default experiment and GetRunsByExperimentID
+	runUnderExpUUID := "run-under-exp-uuid"
+	err = dao.InsertRun(runUnderExpUUID, "Run Under Test Experiment", expID)
+	if err != nil {
+		t.Fatalf("InsertRun under experiment failed: %v", err)
+	}
+
+	runsForExp, err := dao.GetRunsByExperimentID(expID)
+	if err != nil {
+		t.Fatalf("GetRunsByExperimentID failed: %v", err)
+	}
+	if len(runsForExp) != 1 {
+		t.Errorf("Expected 1 run for experiment, got %d", len(runsForExp))
+	}
+	if runsForExp[0].UUID != runUnderExpUUID {
+		t.Errorf("GetRunsByExperimentID returned wrong run: expected %s, got %s", runUnderExpUUID, runsForExp[0].UUID)
+	}
+
+	// Test experiment isolation: create second experiment with a run
+	exp2UUID := "test-exp-uuid-456"
+	err = dao.InsertExperiment(exp2UUID, "Second Experiment")
+	if err != nil {
+		t.Fatalf("InsertExperiment for exp2 failed: %v", err)
+	}
+	exp2ID, err := dao.GetExperimentIDByUUID(exp2UUID)
+	if err != nil {
+		t.Fatalf("GetExperimentIDByUUID for exp2 failed: %v", err)
+	}
+
+	runUnderExp2UUID := "run-under-exp2-uuid"
+	err = dao.InsertRun(runUnderExp2UUID, "Run Under Second Experiment", exp2ID)
+	if err != nil {
+		t.Fatalf("InsertRun under exp2 failed: %v", err)
+	}
+
+	// Verify exp1 still only has 1 run
+	runsForExp, err = dao.GetRunsByExperimentID(expID)
+	if err != nil {
+		t.Fatalf("GetRunsByExperimentID for exp1 failed: %v", err)
+	}
+	if len(runsForExp) != 1 {
+		t.Errorf("Expected 1 run for exp1 after adding run to exp2, got %d", len(runsForExp))
+	}
+
+	// Verify exp2 has exactly 1 run
+	runsForExp2, err := dao.GetRunsByExperimentID(exp2ID)
+	if err != nil {
+		t.Fatalf("GetRunsByExperimentID for exp2 failed: %v", err)
+	}
+	if len(runsForExp2) != 1 {
+		t.Errorf("Expected 1 run for exp2, got %d", len(runsForExp2))
+	}
+	if runsForExp2[0].UUID != runUnderExp2UUID {
+		t.Errorf("GetRunsByExperimentID for exp2 returned wrong run: expected %s, got %s", runUnderExp2UUID, runsForExp2[0].UUID)
+	}
+
 	// Test InsertRun and GetRunByUUID
 	runUUID := "test-run-uuid-123"
 	runName := "Test Run"
-	err := dao.InsertRun(runUUID, runName)
+	err = dao.InsertRun(runUUID, runName, defaultExpID)
 	if err != nil {
 		t.Fatalf("InsertRun failed: %v", err)
 	}

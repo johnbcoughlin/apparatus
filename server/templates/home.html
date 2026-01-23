@@ -1,25 +1,23 @@
 {{template "header.html" .}}
 	<p>Experiment tracking without the AI cruft.</p>
-	{{if .Runs}}
-	<h2>Recent Runs</h2>
+	<h2>Experiments</h2>
 	<table border="1" cellpadding="5" cellspacing="0">
 		<thead>
 			<tr>
 				<th>Name</th>
-				<th>Created At</th>
+				<th>Runs</th>
+				<th>Most Recent Run</th>
 			</tr>
 		</thead>
 		<tbody>
-		{{range .Runs}}
+		{{range .Experiments}}
 			<tr>
-				<td><a href="/runs/{{.UUID}}">{{.Name}}</a></td>
-				<td>{{.CreatedAt}}</td>
+				<td><a href="/experiments/{{.UUID}}">{{.Name}}</a></td>
+				<td>{{.RunCount}}</td>
+				<td>{{if .MostRecentRunAt}}{{.MostRecentRunAt}}{{else}}-{{end}}</td>
 			</tr>
 		{{end}}
 		</tbody>
 	</table>
-	{{else}}
-	<p>No runs yet. Create one using the Python library!</p>
-	{{end}}
 </body>
 </html>

@@ -63,10 +63,12 @@ func main() {
 }
 
 type Run struct {
-	UUID      string
-	Name      string
-	Notes     string
-	CreatedAt string
+	UUID         string
+	Name         string
+	Notes        string
+	CreatedAt    string
+	ParentRunID  *int
+	NestingLevel int
 }
 
 type Experiment struct {
@@ -158,7 +160,7 @@ func handleAPICreateRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = dao.InsertRun(runUUID, name, experimentID)
+	err = dao.InsertRun(runUUID, name, experimentID, nil)
 	if err != nil {
 		log.Fatalf("Failed to insert run: %v", err)
 	}

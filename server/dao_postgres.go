@@ -98,10 +98,24 @@ func (d *PostgresDAO) GetDefaultExperimentID() (int, error) {
 }
 
 // InsertRun inserts a new run
-func (d *PostgresDAO) InsertRun(uuid, name string, experimentID int) error {
+func (d *PostgresDAO) InsertRun(uuid, name string, experimentID int, parentRunID *int) error {
+	var nestingLevel int
+	if parentRunID != nil {
+		// Get parent's nesting level and add 1
+		var parentLevel int
+		err := d.db.QueryRow("SELECT nesting_level FROM runs WHERE id = $1", *parentRunID).Scan(&parentLevel)
+		if err != nil {
+			return fmt.Errorf("failed to get parent run nesting level: %w", err)
+		}
+		nestingLevel = parentLevel + 1
+		if nestingLevel > 2 {
+			return fmt.Errorf("maximum nesting level (2) exceeded")
+		}
+	}
+
 	_, err := d.db.Exec(
-		"INSERT INTO runs (uuid, name, experiment_id) VALUES ($1, $2, $3)",
-		uuid, name, experimentID,
+		"INSERT INTO runs (uuid, name, experiment_id, parent_run_id, nesting_level) VALUES ($1, $2, $3, $4, $5)",
+		uuid, name, experimentID, parentRunID, nestingLevel,
 	)
 	return err
 }
@@ -109,14 +123,21 @@ func (d *PostgresDAO) InsertRun(uuid, name string, experimentID int) error {
 // GetRunByUUID retrieves a run by its UUID
 func (d *PostgresDAO) GetRunByUUID(uuid string) (*Run, error) {
 	var name, notes string
+	var parentRunID sql.NullInt64
+	var nestingLevel int
 	err := d.db.QueryRow(
-		"SELECT name, notes FROM runs WHERE uuid = $1",
+		"SELECT name, notes, parent_run_id, nesting_level FROM runs WHERE uuid = $1",
 		uuid,
-	).Scan(&name, &notes)
+	).Scan(&name, &notes, &parentRunID, &nestingLevel)
 	if err != nil {
 		return nil, err
 	}
-	return &Run{UUID: uuid, Name: name, Notes: notes}, nil
+	run := &Run{UUID: uuid, Name: name, Notes: notes, NestingLevel: nestingLevel}
+	if parentRunID.Valid {
+		id := int(parentRunID.Int64)
+		run.ParentRunID = &id
+	}
+	return run, nil
 }
 
 // GetRunIDByUUID retrieves the database ID of a run by its UUID
@@ -156,7 +177,7 @@ func (d *PostgresDAO) GetAllRuns() ([]Run, error) {
 // GetRunsByExperimentID retrieves all runs for an experiment
 func (d *PostgresDAO) GetRunsByExperimentID(experimentID int) ([]Run, error) {
 	rows, err := d.db.Query(`
-		SELECT uuid, name, created_at
+		SELECT uuid, name, created_at, parent_run_id, nesting_level
 		FROM runs
 		WHERE experiment_id = $1
 		ORDER BY created_at DESC
@@ -169,13 +190,91 @@ func (d *PostgresDAO) GetRunsByExperimentID(experimentID int) ([]Run, error) {
 	var runs []Run
 	for rows.Next() {
 		var uuid, name, createdAt string
-		if err := rows.Scan(&uuid, &name, &createdAt); err != nil {
+		var parentRunID sql.NullInt64
+		var nestingLevel int
+		if err := rows.Scan(&uuid, &name, &createdAt, &parentRunID, &nestingLevel); err != nil {
 			return nil, err
 		}
-		runs = append(runs, Run{UUID: uuid, Name: name, CreatedAt: createdAt})
+		run := Run{UUID: uuid, Name: name, CreatedAt: createdAt, NestingLevel: nestingLevel}
+		if parentRunID.Valid {
+			id := int(parentRunID.Int64)
+			run.ParentRunID = &id
+		}
+		runs = append(runs, run)
 	}
 
 	return runs, rows.Err()
+}
+
+// GetRunsByExperimentIDAndLevel retrieves runs for an experiment at a specific nesting level
+func (d *PostgresDAO) GetRunsByExperimentIDAndLevel(experimentID int, nestingLevel int) ([]Run, error) {
+	rows, err := d.db.Query(`
+		SELECT uuid, name, created_at, parent_run_id, nesting_level
+		FROM runs
+		WHERE experiment_id = $1 AND nesting_level = $2
+		ORDER BY created_at DESC
+	`, experimentID, nestingLevel)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var runs []Run
+	for rows.Next() {
+		var uuid, name, createdAt string
+		var parentRunID sql.NullInt64
+		var level int
+		if err := rows.Scan(&uuid, &name, &createdAt, &parentRunID, &level); err != nil {
+			return nil, err
+		}
+		run := Run{UUID: uuid, Name: name, CreatedAt: createdAt, NestingLevel: level}
+		if parentRunID.Valid {
+			id := int(parentRunID.Int64)
+			run.ParentRunID = &id
+		}
+		runs = append(runs, run)
+	}
+
+	return runs, rows.Err()
+}
+
+// GetChildRuns retrieves all direct child runs of a parent run
+func (d *PostgresDAO) GetChildRuns(parentRunID int) ([]Run, error) {
+	rows, err := d.db.Query(`
+		SELECT uuid, name, created_at, parent_run_id, nesting_level
+		FROM runs
+		WHERE parent_run_id = $1
+		ORDER BY created_at DESC
+	`, parentRunID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var runs []Run
+	for rows.Next() {
+		var uuid, name, createdAt string
+		var pRunID sql.NullInt64
+		var nestingLevel int
+		if err := rows.Scan(&uuid, &name, &createdAt, &pRunID, &nestingLevel); err != nil {
+			return nil, err
+		}
+		run := Run{UUID: uuid, Name: name, CreatedAt: createdAt, NestingLevel: nestingLevel}
+		if pRunID.Valid {
+			id := int(pRunID.Int64)
+			run.ParentRunID = &id
+		}
+		runs = append(runs, run)
+	}
+
+	return runs, rows.Err()
+}
+
+// GetChildRunCount returns the count of direct child runs
+func (d *PostgresDAO) GetChildRunCount(parentRunID int) (int, error) {
+	var count int
+	err := d.db.QueryRow("SELECT COUNT(*) FROM runs WHERE parent_run_id = $1", parentRunID).Scan(&count)
+	return count, err
 }
 
 // UpsertParameter inserts or updates a parameter

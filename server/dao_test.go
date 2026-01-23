@@ -58,7 +58,7 @@ func testDAOImplementation(t *testing.T, dao DAO) {
 
 	// Test run under non-default experiment and GetRunsByExperimentID
 	runUnderExpUUID := "run-under-exp-uuid"
-	err = dao.InsertRun(runUnderExpUUID, "Run Under Test Experiment", expID)
+	err = dao.InsertRun(runUnderExpUUID, "Run Under Test Experiment", expID, nil)
 	if err != nil {
 		t.Fatalf("InsertRun under experiment failed: %v", err)
 	}
@@ -86,7 +86,7 @@ func testDAOImplementation(t *testing.T, dao DAO) {
 	}
 
 	runUnderExp2UUID := "run-under-exp2-uuid"
-	err = dao.InsertRun(runUnderExp2UUID, "Run Under Second Experiment", exp2ID)
+	err = dao.InsertRun(runUnderExp2UUID, "Run Under Second Experiment", exp2ID, nil)
 	if err != nil {
 		t.Fatalf("InsertRun under exp2 failed: %v", err)
 	}
@@ -115,7 +115,7 @@ func testDAOImplementation(t *testing.T, dao DAO) {
 	// Test InsertRun and GetRunByUUID
 	runUUID := "test-run-uuid-123"
 	runName := "Test Run"
-	err = dao.InsertRun(runUUID, runName, defaultExpID)
+	err = dao.InsertRun(runUUID, runName, defaultExpID, nil)
 	if err != nil {
 		t.Fatalf("InsertRun failed: %v", err)
 	}

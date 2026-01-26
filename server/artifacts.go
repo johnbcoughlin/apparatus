@@ -51,7 +51,7 @@ func storeArtifact(runUUID string, artifactPath string, fileData io.Reader) (str
 		return "", fmt.Errorf("failed to write artifact data: %v", err)
 	}
 
-	// Return URI in the format file:///path
-	uri := fmt.Sprintf("file://%s", fullPath)
-	return uri, nil
+	// Return relative path within the artifact store
+	relativePath := filepath.Join(runUUID, artifactPath)
+	return relativePath, nil
 }

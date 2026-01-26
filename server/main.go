@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -661,7 +662,21 @@ func handleViewArtifact(w http.ResponseWriter, r *http.Request) {
 func handleServeArtifactBlob(w http.ResponseWriter, r *http.Request) {
 	artifactURI := r.URL.Query().Get("uri")
 	if strings.HasPrefix(artifactURI, "file://") {
-		http.ServeFile(w, r, strings.TrimPrefix(artifactURI, "file://"))
+		requestedPath := strings.TrimPrefix(artifactURI, "file://")
+		if filepath.IsAbs(requestedPath) {
+			http.Error(w, "Forbidden absolute path", http.StatusForbidden)
+		}
+		cleanPath := filepath.Clean(filepath.Join(artifactStorePath, requestedPath))
+
+		// Ensure the path is within the artifact store to prevent path traversal
+		if !strings.HasPrefix(cleanPath, artifactStorePath) {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+
+		http.ServeFile(w, r, cleanPath)
 		return
+	} else {
+		http.Error(w, "Bad request", http.StatusBadRequest)
 	}
 }

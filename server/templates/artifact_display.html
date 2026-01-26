@@ -5,7 +5,7 @@
     {{if .ArtifactURI}}
         <button 
             id="hash-{{hash .ArtifactPath}}"
-            hx-get="/artifacts?run_uuid={{.RunUUID}}&path={{.ArtifactPath}}" 
+            hx-get="/artifacts?run_uuid={{.RunUUID}}&path={{.ArtifactPath | urlquery}}" 
             hx-target="#artifact-artifacts-tab-view"
             onclick="selectPlot('hash-{{hash .ArtifactPath}}')"
             >
@@ -34,7 +34,7 @@
             {{if .CurrentArtifact}}
             <div id="artifact-display">
                 {{if eq .CurrentArtifact.Type "image"}}
-                <img src="/artifacts/blob?uri={{.CurrentArtifact.URI}}">
+                <img src="/artifacts/blob?uri={{.CurrentArtifact.URI | urlquery}}">
                 {{else}}
                 <span>{{.CurrentArtifact.URI}}</span>
                 {{end}}

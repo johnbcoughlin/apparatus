@@ -423,7 +423,7 @@ func executeRunPageTabsTemplate(w http.ResponseWriter, r *http.Request, runUUID 
 		UUID:                runUUID,
 		PageName:            pageName,
 	}
-	tmpl, err := template.ParseFS(templateFS, "templates/run_page_tabs.html")
+	tmpl, err := template.New("run_page_tabs.html").Funcs(templateFuncs).ParseFS(templateFS, "templates/run_page_tabs.html")
 	if err != nil {
 		log.Fatalf("Failed to parse template: %v", err)
 	}
@@ -534,6 +534,24 @@ func hashString(s string) string {
 	return hex.EncodeToString(h[:8]) // Use first 8 bytes for shorter ID
 }
 
+// safeJSONString returns a JSON-encoded string safe for embedding in HTML attributes.
+// It JSON-encodes the input (escaping quotes, backslashes, etc.) and returns the
+// encoded content without surrounding quotes.
+func safeJSONString(s string) string {
+	bytes, err := json.Marshal(s)
+	if err != nil {
+		return ""
+	}
+	// Remove surrounding quotes since they're provided in the template
+	return string(bytes[1 : len(bytes)-1])
+}
+
+// templateFuncs provides common template functions for HTML templates.
+var templateFuncs = template.FuncMap{
+	"hash":     hashString,
+	"jsonSafe": safeJSONString,
+}
+
 func handleRunArtifacts(w http.ResponseWriter, r *http.Request, runUUID string) {
 	runID, err := dao.GetRunIDByUUID(runUUID)
 	if err != nil {
@@ -576,9 +594,7 @@ func handleRunArtifacts(w http.ResponseWriter, r *http.Request, runUUID string) 
 		CurrentArtifact: currentArtifact,
 	}
 
-	tmpl := template.New("run_artifacts.html").Funcs(template.FuncMap{
-		"hash": hashString,
-	})
+	tmpl := template.New("run_artifacts.html").Funcs(templateFuncs)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	tmpl, err = tmpl.ParseFS(templateFS, "templates/run_artifacts.html")
 	if err != nil {
@@ -648,7 +664,7 @@ func handleViewArtifact(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	tmpl, err := template.ParseFS(templateFS, "templates/artifact_display.html")
+	tmpl, err := template.New("artifact_display.html").Funcs(templateFuncs).ParseFS(templateFS, "templates/artifact_display.html")
 	if err != nil {
 		log.Fatalf("Failed to parse template: %v", err)
 	}

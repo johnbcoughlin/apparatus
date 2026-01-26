@@ -65,12 +65,18 @@ def running_server(request):
             server_process.wait()
         tmpdir.cleanup()
 
-def test_runs_on_main_page(running_server):
+def test_experiments_on_main_page(running_server):
     apparatus.create_run("run 234jkl")
     apparatus.create_run("run 147abc")
 
-    # Test home page
+    # Test home page shows experiments, not runs
     with urllib.request.urlopen(f"http://localhost:8080", timeout=5) as response:
+        content = response.read().decode('utf-8')
+        assert "Default" in content  # Default experiment should be shown
+        assert "Experiments" in content
+
+    # Test experiment page shows runs
+    with urllib.request.urlopen(f"http://localhost:8080/experiments/00000000-0000-0000-0000-000000000000", timeout=5) as response:
         content = response.read().decode('utf-8')
         assert "234jkl" in content
         assert "147abc" in content

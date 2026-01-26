@@ -19,11 +19,89 @@ func NewPostgresDAO(db *sql.DB) *PostgresDAO {
 	return &PostgresDAO{db: db}
 }
 
-// InsertRun inserts a new run
-func (d *PostgresDAO) InsertRun(uuid, name string) error {
+// InsertExperiment inserts a new experiment
+func (d *PostgresDAO) InsertExperiment(uuid, name string) error {
 	_, err := d.db.Exec(
-		"INSERT INTO runs (uuid, name) VALUES ($1, $2)",
+		"INSERT INTO experiments (uuid, name) VALUES ($1, $2)",
 		uuid, name,
+	)
+	return err
+}
+
+// GetExperimentByUUID retrieves an experiment by its UUID
+func (d *PostgresDAO) GetExperimentByUUID(uuid string) (*Experiment, error) {
+	var name, createdAt string
+	var mostRecentRunAt sql.NullString
+	err := d.db.QueryRow(`
+		SELECT e.name, e.created_at,
+			(SELECT MAX(created_at) FROM runs WHERE experiment_id = e.id) as most_recent_run_at
+		FROM experiments e WHERE e.uuid = $1`,
+		uuid,
+	).Scan(&name, &createdAt, &mostRecentRunAt)
+	if err != nil {
+		return nil, err
+	}
+	exp := &Experiment{UUID: uuid, Name: name, CreatedAt: createdAt}
+	if mostRecentRunAt.Valid {
+		exp.MostRecentRunAt = mostRecentRunAt.String
+	}
+	return exp, nil
+}
+
+// GetExperimentIDByUUID retrieves the database ID of an experiment by its UUID
+func (d *PostgresDAO) GetExperimentIDByUUID(uuid string) (int, error) {
+	var id int
+	err := d.db.QueryRow(
+		"SELECT id FROM experiments WHERE uuid = $1",
+		uuid,
+	).Scan(&id)
+	return id, err
+}
+
+// GetAllExperiments retrieves all experiments ordered by most_recent_run_at descending
+func (d *PostgresDAO) GetAllExperiments() ([]Experiment, error) {
+	rows, err := d.db.Query(`
+		SELECT e.uuid, e.name, e.created_at,
+			(SELECT MAX(created_at) FROM runs WHERE experiment_id = e.id) as most_recent_run_at,
+			(SELECT COUNT(*) FROM runs WHERE experiment_id = e.id) as run_count
+		FROM experiments e
+		ORDER BY COALESCE((SELECT MAX(created_at) FROM runs WHERE experiment_id = e.id), e.created_at) DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var experiments []Experiment
+	for rows.Next() {
+		var uuid, name, createdAt string
+		var mostRecentRunAt sql.NullString
+		var runCount int
+		if err := rows.Scan(&uuid, &name, &createdAt, &mostRecentRunAt, &runCount); err != nil {
+			return nil, err
+		}
+		exp := Experiment{UUID: uuid, Name: name, CreatedAt: createdAt, RunCount: runCount}
+		if mostRecentRunAt.Valid {
+			exp.MostRecentRunAt = mostRecentRunAt.String
+		}
+		experiments = append(experiments, exp)
+	}
+
+	return experiments, rows.Err()
+}
+
+// GetDefaultExperimentID returns the ID of the default experiment
+func (d *PostgresDAO) GetDefaultExperimentID() (int, error) {
+	var id int
+	err := d.db.QueryRow("SELECT id FROM experiments WHERE uuid = '00000000-0000-0000-0000-000000000000'").Scan(&id)
+	return id, err
+}
+
+// InsertRun inserts a new run
+func (d *PostgresDAO) InsertRun(uuid, name string, experimentID int) error {
+	_, err := d.db.Exec(
+		"INSERT INTO runs (uuid, name, experiment_id) VALUES ($1, $2, $3)",
+		uuid, name, experimentID,
 	)
 	return err
 }
@@ -58,6 +136,31 @@ func (d *PostgresDAO) GetAllRuns() ([]Run, error) {
 		FROM runs
 		ORDER BY created_at DESC
 	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var runs []Run
+	for rows.Next() {
+		var uuid, name, createdAt string
+		if err := rows.Scan(&uuid, &name, &createdAt); err != nil {
+			return nil, err
+		}
+		runs = append(runs, Run{UUID: uuid, Name: name, CreatedAt: createdAt})
+	}
+
+	return runs, rows.Err()
+}
+
+// GetRunsByExperimentID retrieves all runs for an experiment
+func (d *PostgresDAO) GetRunsByExperimentID(experimentID int) ([]Run, error) {
+	rows, err := d.db.Query(`
+		SELECT uuid, name, created_at
+		FROM runs
+		WHERE experiment_id = $1
+		ORDER BY created_at DESC
+	`, experimentID)
 	if err != nil {
 		return nil, err
 	}

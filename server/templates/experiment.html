@@ -1,0 +1,26 @@
+{{template "header.html" .}}
+	<h1>{{.Experiment.Name}}</h1>
+
+	{{if .Runs}}
+	<h2>Runs</h2>
+	<table border="1" cellpadding="5" cellspacing="0">
+		<thead>
+			<tr>
+				<th>Name</th>
+				<th>Created At</th>
+			</tr>
+		</thead>
+		<tbody>
+		{{range .Runs}}
+			<tr>
+				<td><a href="/runs/{{.UUID}}">{{.Name}}</a></td>
+				<td>{{.CreatedAt}}</td>
+			</tr>
+		{{end}}
+		</tbody>
+	</table>
+	{{else}}
+	<p>No runs in this experiment yet.</p>
+	{{end}}
+</body>
+</html>

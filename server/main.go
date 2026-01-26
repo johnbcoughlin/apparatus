@@ -40,6 +40,8 @@ func main() {
 	http.Handle("/api/metrics", LoggerMiddleware(http.HandlerFunc(handleAPILogMetrics)))
 	http.Handle("/api/artifacts", LoggerMiddleware(http.HandlerFunc(handleAPILogArtifact)))
 	http.Handle("/api/runs/notes", LoggerMiddleware(http.HandlerFunc(handleAPIUpdateRunNotes)))
+	http.Handle("/api/experiments", LoggerMiddleware(http.HandlerFunc(handleAPICreateExperiment)))
+	http.Handle("/experiments/", LoggerMiddleware(http.HandlerFunc(handleViewExperiment)))
 	http.Handle("/runs/", LoggerMiddleware(http.HandlerFunc(handleViewRun)))
 	http.Handle("/artifacts", LoggerMiddleware(http.HandlerFunc(handleViewArtifact)))
 	http.Handle("/artifacts/blob", LoggerMiddleware(http.HandlerFunc(handleServeArtifactBlob)))
@@ -64,6 +66,14 @@ type Run struct {
 	Name      string
 	Notes     string
 	CreatedAt string
+}
+
+type Experiment struct {
+	UUID            string
+	Name            string
+	CreatedAt       string
+	MostRecentRunAt string
+	RunCount        int
 }
 
 func LoggerMiddleware(next http.Handler) http.Handler {
@@ -98,18 +108,18 @@ func (lrw *loggingResponseWriter) WriteHeader(code int) {
 }
 
 func handleHome(w http.ResponseWriter, r *http.Request) {
-	// Query all runs
-	runs, err := dao.GetAllRuns()
+	// Query all experiments
+	experiments, err := dao.GetAllExperiments()
 	if err != nil {
-		log.Fatalf("Failed to query runs: %v", err)
+		log.Fatalf("Failed to query experiments: %v", err)
 	}
 
 	data := struct {
-		Title string
-		Runs  []Run
+		Title       string
+		Experiments []Experiment
 	}{
-		Title: "Home",
-		Runs:  runs,
+		Title:       "Home",
+		Experiments: experiments,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -130,9 +140,24 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 
 func handleAPICreateRun(w http.ResponseWriter, r *http.Request) {
 	name := r.URL.Query().Get("name")
+	experimentUUID := r.URL.Query().Get("experiment_uuid")
 	runUUID := uuid.New().String()
 
-	err := dao.InsertRun(runUUID, name)
+	// Get experiment ID (use default if not specified)
+	var experimentID int
+	var err error
+	if experimentUUID == "" {
+		experimentID, err = dao.GetDefaultExperimentID()
+	} else {
+		experimentID, err = dao.GetExperimentIDByUUID(experimentUUID)
+	}
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid experiment"})
+		return
+	}
+
+	err = dao.InsertRun(runUUID, name, experimentID)
 	if err != nil {
 		log.Fatalf("Failed to insert run: %v", err)
 	}
@@ -378,6 +403,80 @@ func handleAPIUpdateRunNotes(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
+func handleAPICreateExperiment(w http.ResponseWriter, r *http.Request) {
+	name := r.URL.Query().Get("name")
+	experimentUUID := uuid.New().String()
+
+	if name == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Missing required field: name"})
+		return
+	}
+
+	err := dao.InsertExperiment(experimentUUID, name)
+	if err != nil {
+		log.Printf("Failed to insert experiment: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to create experiment"})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"id":   experimentUUID,
+		"name": name,
+	})
+}
+
+func handleViewExperiment(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/experiments/")
+	experimentUUID := strings.TrimSuffix(path, "/")
+
+	experiment, err := dao.GetExperimentByUUID(experimentUUID)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, "Experiment not found")
+		return
+	}
+
+	experimentID, err := dao.GetExperimentIDByUUID(experimentUUID)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, "Experiment not found")
+		return
+	}
+
+	runs, err := dao.GetRunsByExperimentID(experimentID)
+	if err != nil {
+		log.Printf("Failed to get runs: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	data := struct {
+		Title       string
+		Experiment  *Experiment
+		Runs        []Run
+	}{
+		Title:       experiment.Name,
+		Experiment:  experiment,
+		Runs:        runs,
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	tmpl, err := template.ParseFS(templateFS, "templates/header.html", "templates/experiment.html")
+	if err != nil {
+		log.Printf("Failed to parse template: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	err = tmpl.ExecuteTemplate(w, "experiment.html", data)
+	if err != nil {
+		log.Printf("Failed to execute template: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+}
 func handleUpdateRunNotes(w http.ResponseWriter, r *http.Request, runUUID string) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)

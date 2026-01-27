@@ -25,6 +25,7 @@ type DAO interface {
 	GetChildRuns(parentRunID int) ([]Run, error)
 	GetChildRunCount(parentRunID int) (int, error)
 	UpdateRunNotes(runID int, notes string) error
+	GetExperimentForRunUUID(runUUID string) (*Experiment, error)
 
 	// Parameter operations
 	UpsertParameter(runID int, key, valueType string, valueString *string, valueBool *bool, valueFloat *float64, valueInt *int64) error

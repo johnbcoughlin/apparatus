@@ -691,18 +691,28 @@ func handleViewRun(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Get experiment for this run
+	experiment, err := dao.GetExperimentForRunUUID(runUUID)
+	if err != nil {
+		log.Printf("Failed to get experiment for run %s: %v", runUUID, err)
+		// Don't fail the request, just leave experiment nil
+		experiment = nil
+	}
+
 	data := struct {
 		Title          string
 		UUID           string
 		Name           string
 		ParentRun      *Run
 		GrandparentRun *Run
+		Experiment     *Experiment
 	}{
 		Title:          name,
 		UUID:           runUUID,
 		Name:           name,
 		ParentRun:      parentRun,
 		GrandparentRun: grandparentRun,
+		Experiment:     experiment,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

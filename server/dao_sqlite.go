@@ -451,3 +451,18 @@ func (d *SQLiteDAO) UpdateRunNotes(runID int, notes string) error {
 	)
 	return err
 }
+
+// GetExperimentForRunUUID retrieves the experiment associated with a run
+func (d *SQLiteDAO) GetExperimentForRunUUID(runUUID string) (*Experiment, error) {
+	var uuid, name, createdAt string
+	err := d.db.QueryRow(`
+		SELECT e.uuid, e.name, e.created_at
+		FROM experiments e
+		JOIN runs r ON r.experiment_id = e.id
+		WHERE r.uuid = ?
+	`, runUUID).Scan(&uuid, &name, &createdAt)
+	if err != nil {
+		return nil, err
+	}
+	return &Experiment{UUID: uuid, Name: name, CreatedAt: createdAt}, nil
+}

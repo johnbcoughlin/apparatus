@@ -1,17 +1,18 @@
 {{template "header.html" .}}
 	<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.min.js"></script>
 
-	{{if or .GrandparentRun .ParentRun}}
 	<nav style="margin-bottom: 1rem; font-size: 0.9em; color: #666;">
+		{{if .Experiment}}
+		<a href="/experiments/{{.Experiment.UUID}}">{{.Experiment.Name}}</a> &gt;
+		{{end}}
 		{{if .GrandparentRun}}
-		<span style="color: #999;">grandparent:</span> <a href="/runs/{{.GrandparentRun.UUID}}">{{.GrandparentRun.Name}}</a> &gt;
+		<a href="/runs/{{.GrandparentRun.UUID}}">{{.GrandparentRun.Name}}</a> &gt;
 		{{end}}
 		{{if .ParentRun}}
-		<span style="color: #999;">parent:</span> <a href="/runs/{{.ParentRun.UUID}}">{{.ParentRun.Name}}</a> &gt;
+		<a href="/runs/{{.ParentRun.UUID}}">{{.ParentRun.Name}}</a> &gt;
 		{{end}}
 		<span style="color: #333;">{{.Name}}</span>
 	</nav>
-	{{end}}
 
 	<h2>Run: {{.Name}}</h2>
 	<p>UUID: {{.UUID}}</p>

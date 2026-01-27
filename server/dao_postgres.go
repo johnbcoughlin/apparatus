@@ -477,3 +477,18 @@ func (d *PostgresDAO) UpdateRunNotes(runID int, notes string) error {
 	)
 	return err
 }
+
+// GetExperimentForRunUUID retrieves the experiment associated with a run
+func (d *PostgresDAO) GetExperimentForRunUUID(runUUID string) (*Experiment, error) {
+	var uuid, name, createdAt string
+	err := d.db.QueryRow(`
+		SELECT e.uuid, e.name, e.created_at
+		FROM experiments e
+		JOIN runs r ON r.experiment_id = e.id
+		WHERE r.uuid = $1
+	`, runUUID).Scan(&uuid, &name, &createdAt)
+	if err != nil {
+		return nil, err
+	}
+	return &Experiment{UUID: uuid, Name: name, CreatedAt: createdAt}, nil
+}

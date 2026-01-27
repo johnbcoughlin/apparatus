@@ -315,6 +315,12 @@ func handleAPILogArtifact(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := isValidArtifactPath(artifactPath); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": fmt.Sprintf("Invalid artifact path: %v", err)})
+		return
+	}
+
 	// Get run_id from uuid
 	runID, err := dao.GetRunIDByUUID(runUUID)
 	if err != nil {

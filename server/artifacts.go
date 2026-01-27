@@ -6,10 +6,33 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
 var artifactStorePath string
+
+// validArtifactPathPattern matches paths containing only safe characters:
+// alphanumerics, hyphens, underscores, dots, and forward slashes.
+var validArtifactPathPattern = regexp.MustCompile(`^[a-zA-Z0-9_.\-/]+$`)
+
+// isValidArtifactPath checks that an artifact path contains only safe characters
+// and doesn't attempt path traversal.
+func isValidArtifactPath(path string) error {
+	if path == "" {
+		return fmt.Errorf("artifact path cannot be empty")
+	}
+	if strings.HasPrefix(path, "/") {
+		return fmt.Errorf("artifact path cannot be absolute")
+	}
+	if strings.Contains(path, "..") {
+		return fmt.Errorf("artifact path cannot contain '..'")
+	}
+	if !validArtifactPathPattern.MatchString(path) {
+		return fmt.Errorf("artifact path contains invalid characters (allowed: alphanumerics, hyphens, underscores, dots, slashes)")
+	}
+	return nil
+}
 
 func initArtifactStore(uri string) {
 	if strings.HasPrefix(uri, "file://") {
@@ -28,6 +51,10 @@ func initArtifactStore(uri string) {
 
 // storeArtifact saves a file to the artifact store and returns its URI
 func storeArtifact(runUUID string, artifactPath string, fileData io.Reader) (string, error) {
+	if err := isValidArtifactPath(artifactPath); err != nil {
+		return "", fmt.Errorf("invalid artifact path: %w", err)
+	}
+
 	// Create directory structure: {artifactStorePath}/{runUUID}/{dir-of-artifactPath}
 	fullDir := filepath.Join(artifactStorePath, runUUID, filepath.Dir(artifactPath))
 	err := os.MkdirAll(fullDir, os.ModePerm)

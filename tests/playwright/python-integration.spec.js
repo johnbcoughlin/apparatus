@@ -154,16 +154,16 @@ test.describe('Apparatus End-to-End Tests', () => {
     await page.goto('/experiments/00000000-0000-0000-0000-000000000000');
     await page.waitForLoadState('networkidle');
 
-    // Step 3: Verify parent runs are visible with children indicators
-    const parent1Summary = page.locator('summary').filter({ hasText: parent1Name });
-    await expect(parent1Summary).toBeVisible();
-    await expect(parent1Summary.locator('text=(1 children)')).toBeVisible();
+    // Step 3: Verify parent runs are visible with expand indicator (▶)
+    const parent1Row = page.locator('tr').filter({ hasText: parent1Name });
+    await expect(parent1Row).toBeVisible();
+    await expect(parent1Row.locator('text=▶')).toBeVisible();
 
     // Step 4: Verify the details are initially collapsed (child runs not visible)
     await expect(page.getByText(child1aName)).not.toBeVisible();
 
-    // Step 5: Click the parent's summary to expand
-    await parent1Summary.click();
+    // Step 5: Click the parent row to expand
+    await parent1Row.click();
     await page.waitForLoadState('networkidle');
 
     // Step 6: Verify child is now visible and URL has open_l0 param
@@ -171,8 +171,8 @@ test.describe('Apparatus End-to-End Tests', () => {
     await expect(page).toHaveURL(new RegExp(`open_l0=${parent1Id}`));
 
     // Step 7: Expand the child to see grandchildren
-    const child1aSummary = page.locator('summary').filter({ hasText: child1aName });
-    await child1aSummary.click();
+    const child1aRow = page.locator('tr').filter({ hasText: child1aName });
+    await child1aRow.click();
     await page.waitForLoadState('networkidle');
 
     // Step 8: Verify grandchildren are visible and URL has both open_l0 and open_l1
@@ -202,9 +202,9 @@ test.describe('Apparatus End-to-End Tests', () => {
     await expect(page).toHaveURL(new RegExp(`open_l0=${parent1Id}`));
     await expect(page).toHaveURL(new RegExp(`open_l1=${child1aId}`));
 
-    // Step 14: Collapse the child by clicking its summary again (re-query after navigation)
-    const child1aSummaryAfterBack = page.locator('summary').filter({ hasText: child1aName });
-    await child1aSummaryAfterBack.click();
+    // Step 14: Collapse the child by clicking its row again (re-query after navigation)
+    const child1aRowAfterBack = page.locator('tr').filter({ hasText: child1aName });
+    await child1aRowAfterBack.click();
 
     // Step 15: Wait for URL to change (htmx should remove open_l1 or set it empty)
     // The toggle sets open_l1 to empty when collapsing

@@ -173,11 +173,11 @@ def test_nested_runs_experiment_page(running_server):
     parent_id = apparatus.create_run("nested parent")
     child_id = apparatus.create_run("nested child", parent_run_uuid=parent_id)
 
-    # Check experiment page shows parent with child count
+    # Check experiment page shows parent with expand toggle (▶) indicating it has children
     with urllib.request.urlopen(f"http://localhost:8080/experiments/00000000-0000-0000-0000-000000000000", timeout=5) as response:
         content = response.read().decode('utf-8')
         assert "nested parent" in content
-        assert "1 children" in content or "children)" in content
+        assert "▶" in content  # Expand toggle indicates parent has children
 
     # Check opening the parent run shows children
     with urllib.request.urlopen(f"http://localhost:8080/experiments/00000000-0000-0000-0000-000000000000?open_l0={parent_id}", timeout=5) as response:

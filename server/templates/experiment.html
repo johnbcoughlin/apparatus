@@ -1,21 +1,71 @@
 {{template "header.html" .}}
 	<h1>{{.Experiment.Name}}</h1>
 
-	{{if .Runs}}
+	{{if .NestedRuns}}
 	<h2>Runs</h2>
-	<table border="1" cellpadding="5" cellspacing="0">
+	<table border="1" cellpadding="5" cellspacing="0" style="width: 100%;">
 		<thead>
 			<tr>
 				<th>Name</th>
 				<th>Created At</th>
+				<th>Children</th>
 			</tr>
 		</thead>
 		<tbody>
-		{{range .Runs}}
-			<tr>
-				<td><a href="/runs/{{.UUID}}">{{.Name}}</a></td>
-				<td>{{.CreatedAt}}</td>
-			</tr>
+		{{range .NestedRuns}}
+		{{if gt .ChildCount 0}}
+		{{/* Parent row with children - clickable to expand */}}
+		<tr hx-get="/experiments/{{$.ExperimentUUID}}?open_l0={{if eq .UUID $.OpenL0}}{{else}}{{.UUID}}{{end}}"
+			hx-target="body"
+			hx-push-url="true"
+			hx-swap="innerHTML"
+			style="cursor: pointer;">
+			<td><span style="display: inline-block; width: 1em; text-align: center;">{{if eq .UUID $.OpenL0}}▼{{else}}▶{{end}}</span>&nbsp;&nbsp;<a href="/runs/{{.UUID}}" onclick="event.stopPropagation();">{{.Name}}</a></td>
+			<td>{{.CreatedAt}}</td>
+			<td>{{.ChildCount}}</td>
+		</tr>
+		{{if eq .UUID $.OpenL0}}
+		{{/* Child rows - shown when parent is expanded */}}
+		{{range .Children}}
+		{{if gt .ChildCount 0}}
+		{{/* Child with grandchildren - also expandable */}}
+		<tr hx-get="/experiments/{{$.ExperimentUUID}}?open_l0={{$.OpenL0}}&open_l1={{if eq .UUID $.OpenL1}}{{else}}{{.UUID}}{{end}}"
+			hx-target="body"
+			hx-push-url="true"
+			hx-swap="innerHTML"
+			style="cursor: pointer; background: #f8f8f8;">
+			<td style="padding-left: 32px;"><span style="display: inline-block; width: 1em; text-align: center;">{{if eq .UUID $.OpenL1}}▼{{else}}▶{{end}}</span>&nbsp;&nbsp;<a href="/runs/{{.UUID}}" onclick="event.stopPropagation();">{{.Name}}</a></td>
+			<td>{{.CreatedAt}}</td>
+			<td>{{.ChildCount}}</td>
+		</tr>
+		{{if eq .UUID $.OpenL1}}
+		{{/* Grandchild rows */}}
+		{{range .Children}}
+		<tr style="background: #f0f0f0;">
+			<td style="padding-left: 64px;"><span style="display: inline-block; width: 1em;"></span>&nbsp;&nbsp;<a href="/runs/{{.UUID}}">{{.Name}}</a></td>
+			<td>{{.CreatedAt}}</td>
+			<td>-</td>
+		</tr>
+		{{end}}
+		{{end}}
+		{{else}}
+		{{/* Child without grandchildren */}}
+		<tr style="background: #f8f8f8;">
+			<td style="padding-left: 32px;"><span style="display: inline-block; width: 1em;"></span>&nbsp;&nbsp;<a href="/runs/{{.UUID}}">{{.Name}}</a></td>
+			<td>{{.CreatedAt}}</td>
+			<td>-</td>
+		</tr>
+		{{end}}
+		{{end}}
+		{{end}}
+		{{else}}
+		{{/* Top-level run without children */}}
+		<tr>
+			<td><span style="display: inline-block; width: 1em;"></span>&nbsp;&nbsp;<a href="/runs/{{.UUID}}">{{.Name}}</a></td>
+			<td>{{.CreatedAt}}</td>
+			<td>-</td>
+		</tr>
+		{{end}}
 		{{end}}
 		</tbody>
 	</table>

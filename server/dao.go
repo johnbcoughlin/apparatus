@@ -15,12 +15,17 @@ type DAO interface {
 	GetDefaultExperimentID() (int, error)
 
 	// Run operations
-	InsertRun(uuid, name string, experimentID int) error
+	InsertRun(uuid, name string, experimentID int, parentRunID *int) error
 	GetRunByUUID(uuid string) (*Run, error)
+	GetRunByID(id int) (*Run, error)
 	GetRunIDByUUID(uuid string) (int, error)
 	GetAllRuns() ([]Run, error)
 	GetRunsByExperimentID(experimentID int) ([]Run, error)
+	GetRunsByExperimentIDAndLevel(experimentID int, nestingLevel int) ([]Run, error)
+	GetChildRuns(parentRunID int) ([]Run, error)
+	GetChildRunCount(parentRunID int) (int, error)
 	UpdateRunNotes(runID int, notes string) error
+	GetExperimentForRunUUID(runUUID string) (*Experiment, error)
 
 	// Parameter operations
 	UpsertParameter(runID int, key, valueType string, valueString *string, valueBool *bool, valueFloat *float64, valueInt *int64) error
@@ -38,11 +43,13 @@ type DAO interface {
 
 // RunRow represents a row in the runs table
 type RunRow struct {
-	ID        int
-	UUID      string
-	Name      string
-	Notes     string
-	CreatedAt time.Time
+	ID           int
+	UUID         string
+	Name         string
+	Notes        string
+	CreatedAt    time.Time
+	ParentRunID  sql.NullInt64
+	NestingLevel int
 }
 
 // ParameterRow represents a row in the parameters table

@@ -125,4 +125,97 @@ test.describe('Apparatus End-to-End Tests', () => {
     // Step 10: Verify the note persisted after reload
     await expect(page.locator('#notes-form textarea')).toHaveValue(testNote);
   });
+
+  test('nested runs expand/collapse and URL state is preserved on navigation', async ({ page, apparatusAPI }) => {
+    // Step 1: Create a forest of nested runs (parent -> child -> grandchild)
+    const timestamp = Date.now();
+
+    // Create first parent with children and grandchildren
+    const parent1Name = `parent-1-${timestamp}`;
+    const parent1Id = await apparatusAPI.createRun(parent1Name);
+
+    const child1aName = `child-1a-${timestamp}`;
+    const child1aId = await apparatusAPI.createRun(child1aName, parent1Id);
+
+    const grandchild1a1Name = `grandchild-1a1-${timestamp}`;
+    await apparatusAPI.createRun(grandchild1a1Name, child1aId);
+
+    const grandchild1a2Name = `grandchild-1a2-${timestamp}`;
+    await apparatusAPI.createRun(grandchild1a2Name, child1aId);
+
+    // Create second parent with a child (no grandchildren)
+    const parent2Name = `parent-2-${timestamp}`;
+    const parent2Id = await apparatusAPI.createRun(parent2Name);
+
+    const child2aName = `child-2a-${timestamp}`;
+    await apparatusAPI.createRun(child2aName, parent2Id);
+
+    // Step 2: Navigate to the default experiment page
+    await page.goto('/experiments/00000000-0000-0000-0000-000000000000');
+    await page.waitForLoadState('networkidle');
+
+    // Step 3: Verify parent runs are visible with expand indicator (▶)
+    const parent1Row = page.locator('tr').filter({ hasText: parent1Name });
+    await expect(parent1Row).toBeVisible();
+    await expect(parent1Row.locator('text=▶')).toBeVisible();
+
+    // Step 4: Verify the details are initially collapsed (child runs not visible)
+    await expect(page.getByText(child1aName)).not.toBeVisible();
+
+    // Step 5: Click the parent row to expand
+    await parent1Row.click();
+    await page.waitForLoadState('networkidle');
+
+    // Step 6: Verify child is now visible and URL has open_l0 param
+    await expect(page.getByText(child1aName)).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`open_l0=${parent1Id}`));
+
+    // Step 7: Expand the child to see grandchildren
+    const child1aRow = page.locator('tr').filter({ hasText: child1aName });
+    await child1aRow.click();
+    await page.waitForLoadState('networkidle');
+
+    // Step 8: Verify grandchildren are visible and URL has both open_l0 and open_l1
+    await expect(page.getByText(grandchild1a1Name)).toBeVisible();
+    await expect(page.getByText(grandchild1a2Name)).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`open_l0=${parent1Id}`));
+    await expect(page).toHaveURL(new RegExp(`open_l1=${child1aId}`));
+
+    // Step 9: Click into a grandchild run to navigate away
+    await page.getByRole('link', { name: grandchild1a1Name }).click();
+    await page.waitForLoadState('networkidle');
+
+    // Step 10: Verify we're on the run page
+    await expect(page).toHaveURL(new RegExp('/runs/'));
+    await expect(page.locator('text=Run: ' + grandchild1a1Name)).toBeVisible();
+
+    // Step 11: Navigate back using browser back button
+    await page.goBack();
+    await page.waitForLoadState('networkidle');
+
+    // Step 12: Verify the expansion state is preserved - both parent and child should still be expanded
+    await expect(page.getByText(child1aName)).toBeVisible();
+    await expect(page.getByText(grandchild1a1Name)).toBeVisible();
+    await expect(page.getByText(grandchild1a2Name)).toBeVisible();
+
+    // Step 13: Verify URL still has the open params
+    await expect(page).toHaveURL(new RegExp(`open_l0=${parent1Id}`));
+    await expect(page).toHaveURL(new RegExp(`open_l1=${child1aId}`));
+
+    // Step 14: Collapse the child by clicking its row again (re-query after navigation)
+    const child1aRowAfterBack = page.locator('tr').filter({ hasText: child1aName });
+    await child1aRowAfterBack.click();
+
+    // Step 15: Wait for URL to change (htmx should remove open_l1 or set it empty)
+    // The toggle sets open_l1 to empty when collapsing
+    await page.waitForURL(url => !url.toString().includes(`open_l1=${child1aId}`), { timeout: 10000 });
+    await page.waitForLoadState('networkidle');
+
+    // Step 16: Verify grandchildren are no longer visible but child is still visible
+    await expect(page.getByText(grandchild1a1Name)).not.toBeVisible();
+    await expect(page.getByText(child1aName)).toBeVisible();
+
+    // Step 17: Verify open_l0 is still present
+    await expect(page).toHaveURL(new RegExp(`open_l0=${parent1Id}`));
+  });
 });

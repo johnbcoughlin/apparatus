@@ -12,10 +12,15 @@ export const test = base.extend({
       /**
        * Create a new run
        * @param {string} name - Run name
+       * @param {string} [parentRunUuid] - Optional parent run UUID for nested runs
        * @returns {Promise<string>} Run UUID
        */
-      async createRun(name) {
-        const response = await apiContext.get(`/api/runs?name=${encodeURIComponent(name)}`);
+      async createRun(name, parentRunUuid = null) {
+        let url = `/api/runs?name=${encodeURIComponent(name)}`;
+        if (parentRunUuid) {
+          url += `&parent_run_uuid=${encodeURIComponent(parentRunUuid)}`;
+        }
+        const response = await apiContext.get(url);
         if (!response.ok()) {
           throw new Error(`Failed to create run: ${response.status()} ${await response.text()}`);
         }

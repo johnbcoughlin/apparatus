@@ -63,10 +63,20 @@ func main() {
 }
 
 type Run struct {
-	UUID      string
-	Name      string
-	Notes     string
-	CreatedAt string
+	UUID         string
+	Name         string
+	Notes        string
+	CreatedAt    string
+	ParentRunID  *int
+	NestingLevel int
+}
+
+// NestedRun represents a run with its children for hierarchical display
+type NestedRun struct {
+	Run
+	ID         int
+	ChildCount int
+	Children   []NestedRun
 }
 
 type Experiment struct {
@@ -142,6 +152,7 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 func handleAPICreateRun(w http.ResponseWriter, r *http.Request) {
 	name := r.URL.Query().Get("name")
 	experimentUUID := r.URL.Query().Get("experiment_uuid")
+	parentRunUUID := r.URL.Query().Get("parent_run_uuid")
 	runUUID := uuid.New().String()
 
 	// Get experiment ID (use default if not specified)
@@ -158,9 +169,33 @@ func handleAPICreateRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = dao.InsertRun(runUUID, name, experimentID)
+	// Get parent run ID if specified
+	var parentRunID *int
+	if parentRunUUID != "" {
+		id, err := dao.GetRunIDByUUID(parentRunUUID)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Invalid parent run"})
+			return
+		}
+		parentRunID = &id
+
+		// If no experiment was specified, inherit from parent
+		if experimentUUID == "" {
+			parentRun, err := dao.GetRunByUUID(parentRunUUID)
+			if err == nil && parentRun.ParentRunID != nil {
+				// Get experiment from parent (query by run ID)
+				// For now, keep the default experiment since we'd need to add a method
+				// to get experiment_id by run_id
+			}
+		}
+	}
+
+	err = dao.InsertRun(runUUID, name, experimentID, parentRunID)
 	if err != nil {
-		log.Fatalf("Failed to insert run: %v", err)
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -453,21 +488,77 @@ func handleViewExperiment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	runs, err := dao.GetRunsByExperimentID(experimentID)
+	// Get URL query params for open state
+	openL0 := r.URL.Query().Get("open_l0")
+	openL1 := r.URL.Query().Get("open_l1")
+
+	// Get level 0 runs
+	level0Runs, err := dao.GetRunsByExperimentIDAndLevel(experimentID, 0)
 	if err != nil {
-		log.Printf("Failed to get runs: %v", err)
+		log.Printf("Failed to get level 0 runs: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
+	// Build nested run structure
+	// TODO(a-1ebf): Fix N+1 queries - runID and childCount should come from DAO
+	var nestedRuns []NestedRun
+	for _, run := range level0Runs {
+		runID, _ := dao.GetRunIDByUUID(run.UUID)
+		childCount, _ := dao.GetChildRunCount(runID)
+
+		nestedRun := NestedRun{
+			Run:        run,
+			ID:         runID,
+			ChildCount: childCount,
+		}
+
+		// If this run is open, load its children
+		if run.UUID == openL0 && childCount > 0 {
+			childRuns, _ := dao.GetChildRuns(runID)
+			for _, childRun := range childRuns {
+				childRunID, _ := dao.GetRunIDByUUID(childRun.UUID)
+				grandchildCount, _ := dao.GetChildRunCount(childRunID)
+
+				childNestedRun := NestedRun{
+					Run:        childRun,
+					ID:         childRunID,
+					ChildCount: grandchildCount,
+				}
+
+				// If this child is open, load its grandchildren
+				if childRun.UUID == openL1 && grandchildCount > 0 {
+					grandchildRuns, _ := dao.GetChildRuns(childRunID)
+					for _, grandchildRun := range grandchildRuns {
+						grandchildRunID, _ := dao.GetRunIDByUUID(grandchildRun.UUID)
+						childNestedRun.Children = append(childNestedRun.Children, NestedRun{
+							Run: grandchildRun,
+							ID:  grandchildRunID,
+						})
+					}
+				}
+
+				nestedRun.Children = append(nestedRun.Children, childNestedRun)
+			}
+		}
+
+		nestedRuns = append(nestedRuns, nestedRun)
+	}
+
 	data := struct {
-		Title       string
-		Experiment  *Experiment
-		Runs        []Run
+		Title          string
+		Experiment     *Experiment
+		NestedRuns     []NestedRun
+		OpenL0         string
+		OpenL1         string
+		ExperimentUUID string
 	}{
-		Title:       experiment.Name,
-		Experiment:  experiment,
-		Runs:        runs,
+		Title:          experiment.Name,
+		Experiment:     experiment,
+		NestedRuns:     nestedRuns,
+		OpenL0:         openL0,
+		OpenL1:         openL1,
+		ExperimentUUID: experimentUUID,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -577,14 +668,51 @@ func handleViewRun(w http.ResponseWriter, r *http.Request) {
 	}
 	name := run.Name
 
+	// Get parent run info if exists
+	var parentRun *Run
+	var grandparentRun *Run
+	if run.ParentRunID != nil {
+		var err error
+		parentRun, err = dao.GetRunByID(*run.ParentRunID)
+		if err != nil {
+			log.Printf("Failed to get parent run (id=%d) for run %s: %v", *run.ParentRunID, runUUID, err)
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w, "Internal server error")
+			return
+		}
+		if parentRun != nil && parentRun.ParentRunID != nil {
+			grandparentRun, err = dao.GetRunByID(*parentRun.ParentRunID)
+			if err != nil {
+				log.Printf("Failed to get grandparent run (id=%d) for run %s: %v", *parentRun.ParentRunID, runUUID, err)
+				w.WriteHeader(http.StatusInternalServerError)
+				fmt.Fprintf(w, "Internal server error")
+				return
+			}
+		}
+	}
+
+	// Get experiment for this run
+	experiment, err := dao.GetExperimentForRunUUID(runUUID)
+	if err != nil {
+		log.Printf("Failed to get experiment for run %s: %v", runUUID, err)
+		// Don't fail the request, just leave experiment nil
+		experiment = nil
+	}
+
 	data := struct {
-		Title string
-		UUID  string
-		Name  string
+		Title          string
+		UUID           string
+		Name           string
+		ParentRun      *Run
+		GrandparentRun *Run
+		Experiment     *Experiment
 	}{
-		Title: name,
-		UUID:  runUUID,
-		Name:  name,
+		Title:          name,
+		UUID:           runUUID,
+		Name:           name,
+		ParentRun:      parentRun,
+		GrandparentRun: grandparentRun,
+		Experiment:     experiment,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
